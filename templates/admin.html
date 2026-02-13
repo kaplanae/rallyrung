@@ -149,13 +149,19 @@
                         <span class="badge badge-inactive">inactive</span>
                     {% endif %}
                 </td>
-                <td>
+                <td style="display: flex; gap: 4px; flex-wrap: wrap;">
                     <form method="POST" action="{{ url_for('admin_toggle_admin') }}" class="inline-form">
                         <input type="hidden" name="user_id" value="{{ u.id }}">
                         <button type="submit" class="btn btn-secondary btn-sm">
                             {{ "Remove Admin" if u.is_admin else "Make Admin" }}
                         </button>
                     </form>
+                    {% if u.email %}
+                    <form method="POST" action="{{ url_for('admin_generate_login_link') }}" class="inline-form">
+                        <input type="hidden" name="user_id" value="{{ u.id }}">
+                        <button type="submit" class="btn btn-primary btn-sm">Login Link</button>
+                    </form>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

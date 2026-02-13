@@ -6,9 +6,10 @@ import sqlite3
 import json
 import csv
 import io
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from collections import defaultdict
 import os
+import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -185,6 +186,14 @@ def init_db():
             games_lost INTEGER DEFAULT 0,
             movement TEXT
         )''')
+
+        cur.execute('''CREATE TABLE IF NOT EXISTS magic_tokens (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used BOOLEAN DEFAULT FALSE
+        )''')
     else:
         cur.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -257,6 +266,14 @@ def init_db():
             movement TEXT
         )''')
 
+        cur.execute('''CREATE TABLE IF NOT EXISTS magic_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used INTEGER DEFAULT 0
+        )''')
+
     # Seed default ladder
     cur.execute('SELECT id FROM ladders LIMIT 1')
     if not cur.fetchone():
@@ -268,7 +285,11 @@ def init_db():
     cur.execute('SELECT COUNT(*) as cnt FROM users')
     user_count = dict(cur.fetchone())['cnt']
     if user_count == 0:
-        seed_players(conn)
+        try:
+            seed_players(conn)
+        except Exception as e:
+            conn.rollback()
+            print(f"Seed skipped (likely already seeded by another worker): {e}")
 
     conn.close()
 
@@ -440,11 +461,11 @@ def seed_players(conn):
         return
     ladder_id = dict(ladder_row)['id']
 
-    # Make Alex Kaplan (kaplanae@gmail.com) an admin
-    admin_email = 'kaplanae@gmail.com'
+    # Make Alex Kaplan and Darrell Park admins
+    admin_emails = {'kaplanae@gmail.com', 'darrelljpark@yahoo.com'}
 
     for ranking, name, ntrp, gender, phone, email in SEED_PLAYERS:
-        is_admin = 1 if email == admin_email else 0
+        is_admin = 1 if email in admin_emails else 0
         if USE_POSTGRES:
             is_admin = bool(is_admin)
 
@@ -644,6 +665,61 @@ def google_callback():
     except Exception as e:
         print(f"OAuth error: {e}")
     return redirect(url_for('index'))
+
+
+@app.route('/auth/magic/<token>')
+def magic_login(token):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT * FROM magic_tokens WHERE token = {ph}', (token,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        flash('Invalid login link.')
+        return redirect(url_for('index'))
+
+    row = dict(row)
+    if row.get('used') if USE_POSTGRES else row.get('used'):
+        conn.close()
+        flash('This login link has already been used.')
+        return redirect(url_for('index'))
+
+    if datetime.utcnow() > row['expires_at']:
+        conn.close()
+        flash('This login link has expired.')
+        return redirect(url_for('index'))
+
+    # Mark token as used
+    if USE_POSTGRES:
+        cur.execute(f'UPDATE magic_tokens SET used = TRUE WHERE id = {ph}', (row['id'],))
+    else:
+        cur.execute(f'UPDATE magic_tokens SET used = 1 WHERE id = {ph}', (row['id'],))
+
+    # Find the user by email
+    cur.execute(f'SELECT * FROM users WHERE email = {ph}', (row['email'],))
+    user_row = cur.fetchone()
+    conn.commit()
+    conn.close()
+
+    if not user_row:
+        flash('No account found for this email.')
+        return redirect(url_for('index'))
+
+    user_row = dict(user_row)
+    user = User(
+        id=user_row['id'], username=user_row['username'],
+        email=user_row.get('email'), google_id=user_row.get('google_id'),
+        profile_picture=user_row.get('profile_picture'),
+        phone=user_row.get('phone'), ntrp_rating=user_row.get('ntrp_rating'),
+        gender=user_row.get('gender'),
+        is_admin=bool(user_row.get('is_admin')),
+        is_active=bool(user_row.get('is_active', True))
+    )
+    login_user(user)
+    flash(f'Welcome, {user.username}!')
+    return redirect(url_for('ladder'))
 
 
 @app.route('/logout')
@@ -1099,6 +1175,44 @@ def admin():
     conn.close()
     return render_template('admin.html', all_users=all_users, ladder_players=ladder_players,
                            groups=groups, month=month, year=year, disputed_count=disputed_count)
+
+
+@app.route('/admin/generate-login-link', methods=['POST'])
+@login_required
+@require_admin
+def admin_generate_login_link():
+    user_id = int(request.form.get('user_id', 0))
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT email, username FROM users WHERE id = {ph}', (user_id,))
+    user_row = cur.fetchone()
+    if not user_row:
+        conn.close()
+        flash('User not found.')
+        return redirect(url_for('admin'))
+
+    user_row = dict(user_row)
+    email = user_row['email']
+    if not email:
+        conn.close()
+        flash('User has no email address.')
+        return redirect(url_for('admin'))
+
+    token = str(uuid.uuid4())
+    expires_at = datetime.utcnow() + timedelta(hours=24)
+
+    cur.execute(f'''
+        INSERT INTO magic_tokens (email, token, expires_at)
+        VALUES ({ph}, {ph}, {ph})
+    ''', (email, token, expires_at))
+    conn.commit()
+    conn.close()
+
+    link = url_for('magic_login', token=token, _external=True)
+    flash(f'Login link for {user_row["username"]}: {link}')
+    return redirect(url_for('admin'))
 
 
 @app.route('/admin/add-to-ladder', methods=['POST'])
