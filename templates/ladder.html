@@ -17,17 +17,7 @@
         <tbody>
             {% for p in players %}
             <tr>
-                <td>
-                    {% if p.ranking == 1 %}
-                        <span class="rank-badge rank-1">1</span>
-                    {% elif p.ranking == 2 %}
-                        <span class="rank-badge rank-2">2</span>
-                    {% elif p.ranking == 3 %}
-                        <span class="rank-badge rank-3">3</span>
-                    {% else %}
-                        <span class="rank-badge rank-default">{{ p.ranking }}</span>
-                    {% endif %}
-                </td>
+                <td>{{ p.ranking }}</td>
                 <td>
                     <div class="player-cell">
                         {% if p.profile_picture %}
