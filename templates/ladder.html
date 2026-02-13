@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Ladder — RallyRung{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Tennis Ladder</h1>
+
+{% if players %}
+<div class="card">
+    <table class="ladder-table">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>NTRP</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in players %}
+            <tr>
+                <td>
+                    {% if p.ranking == 1 %}
+                        <span class="rank-badge rank-1">1</span>
+                    {% elif p.ranking == 2 %}
+                        <span class="rank-badge rank-2">2</span>
+                    {% elif p.ranking == 3 %}
+                        <span class="rank-badge rank-3">3</span>
+                    {% else %}
+                        <span class="rank-badge rank-default">{{ p.ranking }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="player-cell">
+                        {% if p.profile_picture %}
+                            <img src="{{ p.profile_picture }}" alt="">
+                        {% endif %}
+                        {{ p.username }}
+                    </div>
+                </td>
+                <td>
+                    {% if p.ntrp_rating %}
+                        <span class="ntrp-badge">{{ p.ntrp_rating }}</span>
+                    {% else %}
+                        <span style="color: var(--text-muted);">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No players on the ladder yet.</p>
+</div>
+{% endif %}
+
+{% if groups %}
+<h2 class="section-title" style="margin-top: 32px;">
+    Groups — {{ ["", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][month] }} {{ year }}
+</h2>
+
+{% for g in groups %}
+<div class="group-card">
+    <h3>Group {{ g.group_number }}</h3>
+    <div class="group-players">
+        <div class="group-player">{{ g.p1_name or "—" }}</div>
+        <div class="group-player">{{ g.p2_name or "—" }}</div>
+        {% if g.p3_name %}
+            <div class="group-player">{{ g.p3_name }}</div>
+        {% endif %}
+    </div>
+
+    {% if g.matches %}
+        {% for m in g.matches %}
+        <div class="match-card">
+            <div class="match-header">
+                <span class="match-players">
+                    {% for p in players if p.id == m.player1_id %}{{ p.username }}{% endfor %}
+                    vs
+                    {% for p in players if p.id == m.player2_id %}{{ p.username }}{% endfor %}
+                </span>
+                <span class="match-status status-{{ m.status }}">{{ m.status }}</span>
+            </div>
+            <div class="match-scores">
+                {% if m.set1_p1 is not none %}
+                    <span class="set-score">{{ m.set1_p1 }}-{{ m.set1_p2 }}</span>
+                {% endif %}
+                {% if m.set2_p1 is not none %}
+                    <span class="set-score">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
+                {% endif %}
+                {% if m.set3_p1 is not none %}
+                    <span class="set-score">{{ m.set3_p1 }}-{{ m.set3_p2 }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

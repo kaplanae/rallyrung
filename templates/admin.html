@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Admin — RallyRung{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Admin Panel</h1>
+
+{% if disputed_count > 0 %}
+<div class="flash error">{{ disputed_count }} disputed match{{ 'es' if disputed_count > 1 }} need review.</div>
+{% endif %}
+
+<!-- Monthly Actions -->
+<div class="admin-section">
+    <h2>Monthly Actions</h2>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <form method="POST" action="{{ url_for('admin_generate_groups') }}"
+              onsubmit="return confirm('This will regenerate groups for the current month and delete any existing matches. Continue?')">
+            <button type="submit" class="btn btn-primary">Generate Groups ({{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month] }} {{ year }})</button>
+        </form>
+        <form method="POST" action="{{ url_for('admin_monthly_reset') }}"
+              onsubmit="return confirm('This will finalize this month, apply ranking changes, and archive results. Continue?')">
+            <button type="submit" class="btn btn-secondary">Run Monthly Reset</button>
+        </form>
+    </div>
+</div>
+
+<!-- CSV Import -->
+<div class="admin-section">
+    <h2>Import Players from CSV</h2>
+    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">
+        CSV columns: Rank, Name, NTRP, Gender, Phone, Email
+    </p>
+    <form method="POST" action="{{ url_for('admin_import_csv') }}" enctype="multipart/form-data" style="display: flex; gap: 12px; align-items: center;">
+        <input type="file" name="csv_file" accept=".csv" required
+               style="color: var(--text-muted); font-size: 0.85rem;">
+        <button type="submit" class="btn btn-primary btn-sm">Import</button>
+    </form>
+</div>
+
+<!-- Current Groups -->
+{% if groups %}
+<div class="admin-section">
+    <h2>Current Groups ({{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month] }} {{ year }})</h2>
+    {% for g in groups %}
+    <div class="group-card">
+        <h3>Group {{ g.group_number }}</h3>
+        <div class="group-players">
+            <span class="group-player">{{ g.p1_name or "—" }}</span>
+            <span class="group-player">{{ g.p2_name or "—" }}</span>
+            {% if g.p3_name %}<span class="group-player">{{ g.p3_name }}</span>{% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Ladder Players -->
+<div class="admin-section">
+    <h2>Ladder Rankings</h2>
+    {% if ladder_players %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>NTRP</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lp in ladder_players %}
+            <tr>
+                <td>
+                    <form method="POST" action="{{ url_for('admin_update_ranking') }}" style="display: flex; gap: 4px; align-items: center;">
+                        <input type="hidden" name="user_id" value="{{ lp.user_id }}">
+                        <input type="number" name="new_ranking" value="{{ lp.ranking }}" min="1"
+                               style="width: 50px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); text-align: center; font-size: 0.85rem;">
+                        <button type="submit" class="btn btn-secondary btn-sm" style="padding: 3px 8px;">Set</button>
+                    </form>
+                </td>
+                <td>{{ lp.username }}</td>
+                <td style="font-size: 0.8rem; color: var(--text-muted);">{{ lp.email or "—" }}</td>
+                <td style="font-size: 0.8rem;">{{ lp.phone or "—" }}</td>
+                <td>{{ lp.ntrp_rating or "—" }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin_remove_from_ladder') }}" class="inline-form"
+                          onsubmit="return confirm('Remove {{ lp.username }} from the ladder?')">
+                        <input type="hidden" name="user_id" value="{{ lp.user_id }}">
+                        <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state"><p>No players on the ladder yet.</p></div>
+    {% endif %}
+</div>
+
+<!-- Add Player to Ladder -->
+<div class="admin-section">
+    <h2>Add Player to Ladder</h2>
+    <form method="POST" action="{{ url_for('admin_add_to_ladder') }}" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+        <div class="form-group" style="margin: 0; min-width: 200px;">
+            <label>Player</label>
+            <select name="user_id" required>
+                <option value="">Select player...</option>
+                {% for u in all_users %}
+                    <option value="{{ u.id }}">{{ u.username }} ({{ u.email or 'no email' }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin: 0; width: 100px;">
+            <label>Ranking</label>
+            <input type="number" name="ranking" min="1" required placeholder="#">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+    </form>
+</div>
+
+<!-- All Users -->
+<div class="admin-section">
+    <h2>All Users</h2>
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in all_users %}
+            <tr>
+                <td>{{ u.id }}</td>
+                <td>
+                    {{ u.username }}
+                    {% if u.is_admin %}<span class="badge badge-admin">admin</span>{% endif %}
+                </td>
+                <td style="font-size: 0.8rem; color: var(--text-muted);">{{ u.email or "—" }}</td>
+                <td>
+                    {% if u.is_active %}
+                        <span class="badge badge-active">active</span>
+                    {% else %}
+                        <span class="badge badge-inactive">inactive</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin_toggle_admin') }}" class="inline-form">
+                        <input type="hidden" name="user_id" value="{{ u.id }}">
+                        <button type="submit" class="btn btn-secondary btn-sm">
+                            {{ "Remove Admin" if u.is_admin else "Make Admin" }}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Submit Result — RallyRung{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Submit Match Result</h1>
+
+<div class="card">
+    <form method="POST" action="{{ url_for('submit_result') }}" id="result-form">
+        <div class="form-group">
+            <label>Opponent</label>
+            <select name="opponent_id" required>
+                <option value="">Select opponent...</option>
+                {% for opp in opponents %}
+                    <option value="{{ opp.id }}">{{ opp.username }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Winner</label>
+            <select name="winner_id" required id="winner-select">
+                <option value="">Select winner...</option>
+                <option value="{{ current_user.id }}">Me ({{ current_user.username }})</option>
+                {% for opp in opponents %}
+                    <option value="{{ opp.id }}">{{ opp.username }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div style="margin: 20px 0;">
+            <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                Set Scores <span style="font-weight: 400; text-transform: none;">(your score first)</span>
+            </label>
+
+            <div class="set-score-row">
+                <label>Set 1</label>
+                <input type="number" name="set1_p1" min="0" max="7" required placeholder="You">
+                <span class="dash">—</span>
+                <input type="number" name="set1_p2" min="0" max="7" required placeholder="Opp">
+            </div>
+
+            <div class="set-score-row">
+                <label>Set 2</label>
+                <input type="number" name="set2_p1" min="0" max="7" required placeholder="You">
+                <span class="dash">—</span>
+                <input type="number" name="set2_p2" min="0" max="7" required placeholder="Opp">
+            </div>
+
+            <div class="set-score-row">
+                <label>Set 3</label>
+                <input type="number" name="set3_p1" min="0" max="7" placeholder="You">
+                <span class="dash">—</span>
+                <input type="number" name="set3_p2" min="0" max="7" placeholder="Opp">
+                <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">optional</span>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+            <button type="submit" class="btn btn-primary">Submit Result</button>
+            <a href="{{ url_for('my_group') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('result-form').addEventListener('submit', function(e) {
+    const sets = [];
+    for (let i = 1; i <= 3; i++) {
+        const p1 = document.querySelector(`[name="set${i}_p1"]`).value;
+        const p2 = document.querySelector(`[name="set${i}_p2"]`).value;
+        if (p1 !== '' && p2 !== '') {
+            sets.push([parseInt(p1), parseInt(p2)]);
+        }
+    }
+
+    if (sets.length < 2) {
+        alert('At least 2 sets are required.');
+        e.preventDefault();
+        return;
+    }
+
+    for (let i = 0; i < sets.length; i++) {
+        const [a, b] = sets[i];
+        const valid = [
+            [6,0],[6,1],[6,2],[6,3],[6,4],[7,5],[7,6],
+            [0,6],[1,6],[2,6],[3,6],[4,6],[5,7],[6,7]
+        ];
+        if (!valid.some(v => v[0] === a && v[1] === b)) {
+            alert(`Set ${i+1} score ${a}-${b} is not a valid tennis score.\n\nValid: 6-0 to 6-4, 7-5, 7-6 (and reversed)`);
+            e.preventDefault();
+            return;
+        }
+    }
+});
+</script>
+{% endblock %}
