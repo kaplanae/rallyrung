@@ -7,6 +7,7 @@ import json
 import csv
 import io
 from datetime import datetime, date, timedelta
+from calendar import monthrange
 from collections import defaultdict
 import os
 import uuid
@@ -194,6 +195,26 @@ def init_db():
             expires_at TIMESTAMP NOT NULL,
             used BOOLEAN DEFAULT FALSE
         )''')
+
+        cur.execute('''CREATE TABLE IF NOT EXISTS player_availability (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            available_date TEXT NOT NULL,
+            start_hour INTEGER NOT NULL,
+            end_hour INTEGER NOT NULL
+        )''')
+
+        cur.execute('''CREATE TABLE IF NOT EXISTS match_bookings (
+            id SERIAL PRIMARY KEY,
+            group_id INTEGER NOT NULL REFERENCES monthly_groups(id),
+            requester_id INTEGER NOT NULL REFERENCES users(id),
+            opponent_id INTEGER NOT NULL REFERENCES users(id),
+            match_date TEXT NOT NULL,
+            start_hour INTEGER NOT NULL,
+            end_hour INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
     else:
         cur.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -272,6 +293,26 @@ def init_db():
             token TEXT UNIQUE NOT NULL,
             expires_at TIMESTAMP NOT NULL,
             used INTEGER DEFAULT 0
+        )''')
+
+        cur.execute('''CREATE TABLE IF NOT EXISTS player_availability (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            available_date TEXT NOT NULL,
+            start_hour INTEGER NOT NULL,
+            end_hour INTEGER NOT NULL
+        )''')
+
+        cur.execute('''CREATE TABLE IF NOT EXISTS match_bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id INTEGER NOT NULL REFERENCES monthly_groups(id),
+            requester_id INTEGER NOT NULL REFERENCES users(id),
+            opponent_id INTEGER NOT NULL REFERENCES users(id),
+            match_date TEXT NOT NULL,
+            start_hour INTEGER NOT NULL,
+            end_hour INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
     # Seed default ladder
@@ -627,6 +668,67 @@ def get_group_standings(group_id):
     return stats
 
 
+DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+
+@app.template_filter('format_hour')
+def format_hour(hour):
+    """Format 24-hour integer to 12-hour display (e.g. 18 -> '6:00 PM')."""
+    if hour == 0:
+        return '12:00 AM'
+    elif hour < 12:
+        return f'{hour}:00 AM'
+    elif hour == 12:
+        return '12:00 PM'
+    else:
+        return f'{hour - 12}:00 PM'
+
+
+def compute_bookable_slots(my_avail, opp_avail, all_bookings, my_id, opp_id):
+    """Compute available 2-hour booking slots from overlapping date-specific availability."""
+    today = date.today()
+
+    my_windows = defaultdict(list)
+    for a in my_avail:
+        my_windows[a['available_date']].append((a['start_hour'], a['end_hour']))
+
+    opp_windows = defaultdict(list)
+    for a in opp_avail:
+        opp_windows[a['available_date']].append((a['start_hour'], a['end_hour']))
+
+    # Collect hours already booked for either player
+    booked = set()
+    for b in all_bookings:
+        if b['status'] in ('pending', 'confirmed'):
+            if b['requester_id'] in (my_id, opp_id) or b['opponent_id'] in (my_id, opp_id):
+                for h in range(b['start_hour'], b['end_hour']):
+                    booked.add((b['match_date'], h))
+
+    # Find dates where both players have availability
+    common_dates = sorted(set(my_windows.keys()) & set(opp_windows.keys()))
+
+    slots = []
+    for date_str in common_dates:
+        d = date.fromisoformat(date_str)
+        if d <= today:
+            continue
+        for ms, me in my_windows[date_str]:
+            for os_, oe in opp_windows[date_str]:
+                start = max(ms, os_)
+                end = min(me, oe)
+                if end - start >= 2:
+                    for h in range(start, end - 1):
+                        if (date_str, h) not in booked and (date_str, h + 1) not in booked:
+                            slots.append({
+                                'date': date_str,
+                                'date_display': d.strftime('%a, %b %d'),
+                                'start_hour': h,
+                                'end_hour': h + 2,
+                            })
+
+    return slots
+
+
 # ============ AUTH ROUTES ============
 
 @app.route('/auth/google')
@@ -843,9 +945,47 @@ def my_group():
 
     standings = get_group_standings(group['id'])
 
+    # Get availability for all group members (current month only)
+    opponent_ids = [pid for pid in player_ids if pid and pid != current_user.id]
+    month_prefix = f'{year}-{month:02d}'
+    availability = {}
+    for pid in player_ids:
+        if pid:
+            cur.execute(f"SELECT * FROM player_availability WHERE user_id = {ph} AND available_date LIKE {ph} ORDER BY available_date, start_hour",
+                        (pid, month_prefix + '%'))
+            avail = [dict(r) for r in cur.fetchall()]
+            for a in avail:
+                d = date.fromisoformat(a['available_date'])
+                a['date_display'] = d.strftime('%a %b %d')
+            availability[pid] = avail
+
+    # Get bookings for this group
+    cur.execute(f'''
+        SELECT mb.*, u1.username as requester_name, u2.username as opponent_name
+        FROM match_bookings mb
+        JOIN users u1 ON mb.requester_id = u1.id
+        JOIN users u2 ON mb.opponent_id = u2.id
+        WHERE mb.group_id = {ph} AND mb.status IN ('pending', 'confirmed')
+        ORDER BY mb.match_date, mb.start_hour
+    ''', (group['id'],))
+    bookings = [dict(r) for r in cur.fetchall()]
+
+    # Compute bookable slots for each opponent
+    my_avail = availability.get(current_user.id, [])
+    opponent_slots = {}
+    for pid in opponent_ids:
+        opp_avail = availability.get(pid, [])
+        opponent_slots[pid] = compute_bookable_slots(my_avail, opp_avail, bookings, current_user.id, pid)
+
+    # Build opponent name lookup
+    opponent_names = {p['id']: p['username'] for p in group_players}
+
     conn.close()
     return render_template('my_group.html', group=group, group_players=group_players,
-                           matches=matches, standings=standings)
+                           matches=matches, standings=standings, availability=availability,
+                           bookings=bookings, opponent_slots=opponent_slots,
+                           opponent_ids=opponent_ids, opponent_names=opponent_names,
+                           DAY_NAMES=DAY_NAMES)
 
 
 @app.route('/submit-result', methods=['GET', 'POST'])
@@ -1113,6 +1253,141 @@ def profile():
                            total_wins=total_wins, total_losses=total_losses)
 
 
+@app.route('/ladder/join', methods=['POST'])
+@login_required
+def ladder_join():
+    ntrp_rating = request.form.get('ntrp_rating', '').strip()
+    if not ntrp_rating:
+        flash('Please select an NTRP rating.')
+        return redirect(url_for('profile'))
+
+    ladder_id = get_ladder_id()
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # Check if already on ladder
+    cur.execute(f'SELECT id FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
+                (current_user.id, ladder_id))
+    if cur.fetchone():
+        conn.close()
+        flash('You are already on the ladder.')
+        return redirect(url_for('profile'))
+
+    # Update user's NTRP rating
+    cur.execute(f'UPDATE users SET ntrp_rating = {ph} WHERE id = {ph}',
+                (ntrp_rating, current_user.id))
+
+    # Find insertion point: after the last player with same or higher NTRP rating
+    cur.execute(f'''
+        SELECT lp.ranking, u.ntrp_rating
+        FROM ladder_players lp
+        JOIN users u ON lp.user_id = u.id
+        WHERE lp.ladder_id = {ph}
+        ORDER BY lp.ranking ASC
+    ''', (ladder_id,))
+    players = [dict(r) for r in cur.fetchall()]
+
+    submitted_rating = float(ntrp_rating)
+    max_rank_at_or_above = 0
+    for p in players:
+        try:
+            player_rating = float(p['ntrp_rating']) if p['ntrp_rating'] else 0
+        except (ValueError, TypeError):
+            player_rating = 0
+        if player_rating >= submitted_rating:
+            max_rank_at_or_above = max(max_rank_at_or_above, p['ranking'])
+
+    if max_rank_at_or_above > 0:
+        new_ranking = max_rank_at_or_above + 1
+    else:
+        new_ranking = 1
+
+    # Shift everyone at or below the new ranking down by 1
+    cur.execute(f'''
+        UPDATE ladder_players SET ranking = ranking + 1
+        WHERE ladder_id = {ph} AND ranking >= {ph}
+    ''', (ladder_id, new_ranking))
+
+    cur.execute(f'''
+        INSERT INTO ladder_players (user_id, ladder_id, ranking)
+        VALUES ({ph}, {ph}, {ph})
+    ''', (current_user.id, ladder_id, new_ranking))
+
+    conn.commit()
+    conn.close()
+    flash(f'Welcome to the ladder! You have been placed at rank #{new_ranking}.')
+    return redirect(url_for('profile'))
+
+
+@app.route('/ladder/leave', methods=['POST'])
+@login_required
+def ladder_leave():
+    ladder_id = get_ladder_id()
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT ranking FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
+                (current_user.id, ladder_id))
+    row = cur.fetchone()
+    if row:
+        old_ranking = dict(row)['ranking']
+        cur.execute(f'DELETE FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
+                    (current_user.id, ladder_id))
+        cur.execute(f'''
+            UPDATE ladder_players SET ranking = ranking - 1
+            WHERE ladder_id = {ph} AND ranking > {ph}
+        ''', (ladder_id, old_ranking))
+        conn.commit()
+        flash('You have left the ladder.')
+    else:
+        flash('You are not on the ladder.')
+
+    conn.close()
+    return redirect(url_for('profile'))
+
+
+@app.route('/ladder/pause', methods=['POST'])
+@login_required
+def ladder_pause():
+    ladder_id = get_ladder_id()
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    if USE_POSTGRES:
+        cur.execute(f'UPDATE ladder_players SET is_active = FALSE WHERE user_id = {ph} AND ladder_id = {ph}',
+                    (current_user.id, ladder_id))
+    else:
+        cur.execute(f'UPDATE ladder_players SET is_active = 0 WHERE user_id = {ph} AND ladder_id = {ph}',
+                    (current_user.id, ladder_id))
+    conn.commit()
+    conn.close()
+    flash('Your ladder participation is paused. You keep your ranking but won\'t be placed in groups.')
+    return redirect(url_for('profile'))
+
+
+@app.route('/ladder/unpause', methods=['POST'])
+@login_required
+def ladder_unpause():
+    ladder_id = get_ladder_id()
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    if USE_POSTGRES:
+        cur.execute(f'UPDATE ladder_players SET is_active = TRUE WHERE user_id = {ph} AND ladder_id = {ph}',
+                    (current_user.id, ladder_id))
+    else:
+        cur.execute(f'UPDATE ladder_players SET is_active = 1 WHERE user_id = {ph} AND ladder_id = {ph}',
+                    (current_user.id, ladder_id))
+    conn.commit()
+    conn.close()
+    flash('Welcome back! You are active on the ladder again.')
+    return redirect(url_for('profile'))
+
+
 @app.route('/profile/edit', methods=['POST'])
 @login_required
 def edit_profile():
@@ -1128,6 +1403,327 @@ def edit_profile():
     conn.close()
     flash('Profile updated.')
     return redirect(url_for('profile'))
+
+
+# ============ AVAILABILITY & BOOKING ROUTES ============
+
+@app.route('/availability')
+@login_required
+def availability():
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    month, year = get_current_month_year()
+    _, days_in_month = monthrange(year, month)
+    month_prefix = f'{year}-{month:02d}'
+
+    cur.execute(f"SELECT * FROM player_availability WHERE user_id = {ph} AND available_date LIKE {ph} ORDER BY available_date, start_hour",
+                (current_user.id, month_prefix + '%'))
+    windows = [dict(r) for r in cur.fetchall()]
+    for w in windows:
+        d = date.fromisoformat(w['available_date'])
+        w['date_display'] = d.strftime('%a, %b %d')
+
+    # Generate remaining dates for the date picker
+    today = date.today()
+    remaining_dates = []
+    for day_num in range(1, days_in_month + 1):
+        d = date(year, month, day_num)
+        if d > today:
+            remaining_dates.append({
+                'date': d.isoformat(),
+                'display': d.strftime('%a, %b %d'),
+            })
+
+    conn.close()
+    return render_template('availability.html', windows=windows, remaining_dates=remaining_dates,
+                           month=month, year=year, DAY_NAMES=DAY_NAMES)
+
+
+@app.route('/availability/add', methods=['POST'])
+@login_required
+def availability_add():
+    available_date = request.form.get('available_date', '').strip()
+    try:
+        start_hour = int(request.form.get('start_hour', -1))
+        end_hour = int(request.form.get('end_hour', -1))
+    except (ValueError, TypeError):
+        flash('Invalid input.')
+        return redirect(url_for('availability'))
+
+    if not available_date:
+        flash('Please select a date.')
+        return redirect(url_for('availability'))
+    if start_hour < 0 or start_hour > 23 or end_hour < 1 or end_hour > 23:
+        flash('Invalid time.')
+        return redirect(url_for('availability'))
+    if end_hour <= start_hour:
+        flash('End time must be after start time.')
+        return redirect(url_for('availability'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # Check for duplicate
+    cur.execute(f'''SELECT id FROM player_availability
+        WHERE user_id = {ph} AND available_date = {ph} AND start_hour = {ph} AND end_hour = {ph}''',
+                (current_user.id, available_date, start_hour, end_hour))
+    if cur.fetchone():
+        conn.close()
+        flash('This window already exists.')
+        return redirect(url_for('availability'))
+
+    cur.execute(f'''INSERT INTO player_availability (user_id, available_date, start_hour, end_hour)
+        VALUES ({ph}, {ph}, {ph}, {ph})''',
+                (current_user.id, available_date, start_hour, end_hour))
+    conn.commit()
+    conn.close()
+    flash('Availability added.')
+    return redirect(url_for('availability'))
+
+
+@app.route('/availability/quick-fill', methods=['POST'])
+@login_required
+def availability_quick_fill():
+    pattern = request.form.get('pattern', '')
+    try:
+        start_hour = int(request.form.get('start_hour', -1))
+        end_hour = int(request.form.get('end_hour', -1))
+    except (ValueError, TypeError):
+        flash('Invalid input.')
+        return redirect(url_for('availability'))
+
+    if pattern not in ('weekdays', 'weekends', 'all'):
+        flash('Invalid pattern.')
+        return redirect(url_for('availability'))
+    if end_hour <= start_hour:
+        flash('End time must be after start time.')
+        return redirect(url_for('availability'))
+
+    month, year = get_current_month_year()
+    _, days_in_month = monthrange(year, month)
+    today = date.today()
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    added = 0
+    for day_num in range(1, days_in_month + 1):
+        d = date(year, month, day_num)
+        if d <= today:
+            continue
+        dow = d.weekday()  # 0=Mon, 6=Sun
+        if pattern == 'weekdays' and dow >= 5:
+            continue
+        if pattern == 'weekends' and dow < 5:
+            continue
+
+        date_str = d.isoformat()
+        # Skip if already exists
+        cur.execute(f'''SELECT id FROM player_availability
+            WHERE user_id = {ph} AND available_date = {ph} AND start_hour = {ph} AND end_hour = {ph}''',
+                    (current_user.id, date_str, start_hour, end_hour))
+        if not cur.fetchone():
+            cur.execute(f'''INSERT INTO player_availability (user_id, available_date, start_hour, end_hour)
+                VALUES ({ph}, {ph}, {ph}, {ph})''',
+                        (current_user.id, date_str, start_hour, end_hour))
+            added += 1
+
+    conn.commit()
+    conn.close()
+    flash(f'Added {added} availability windows.')
+    return redirect(url_for('availability'))
+
+
+@app.route('/availability/clear', methods=['POST'])
+@login_required
+def availability_clear():
+    month, year = get_current_month_year()
+    month_prefix = f'{year}-{month:02d}'
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f"DELETE FROM player_availability WHERE user_id = {ph} AND available_date LIKE {ph}",
+                (current_user.id, month_prefix + '%'))
+    conn.commit()
+    conn.close()
+    flash('All availability cleared for this month.')
+    return redirect(url_for('availability'))
+
+
+@app.route('/availability/delete/<int:avail_id>', methods=['POST'])
+@login_required
+def availability_delete(avail_id):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'DELETE FROM player_availability WHERE id = {ph} AND user_id = {ph}',
+                (avail_id, current_user.id))
+    conn.commit()
+    conn.close()
+    flash('Availability removed.')
+    return redirect(url_for('availability'))
+
+
+@app.route('/book-match', methods=['POST'])
+@login_required
+def book_match():
+    try:
+        opponent_id = int(request.form.get('opponent_id', 0))
+        match_date = request.form.get('match_date', '').strip()
+        start_hour = int(request.form.get('start_hour', -1))
+    except (ValueError, TypeError):
+        flash('Invalid booking data.')
+        return redirect(url_for('my_group'))
+
+    end_hour = start_hour + 2
+    ladder_id = get_ladder_id()
+    month, year = get_current_month_year()
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # Verify both players are in the same group
+    cur.execute(f'''
+        SELECT id FROM monthly_groups
+        WHERE ladder_id = {ph} AND month = {ph} AND year = {ph}
+          AND (player1_id = {ph} OR player2_id = {ph} OR player3_id = {ph})
+          AND (player1_id = {ph} OR player2_id = {ph} OR player3_id = {ph})
+    ''', (ladder_id, month, year,
+          current_user.id, current_user.id, current_user.id,
+          opponent_id, opponent_id, opponent_id))
+    group_row = cur.fetchone()
+    if not group_row:
+        conn.close()
+        flash('You are not in the same group as this player.')
+        return redirect(url_for('my_group'))
+
+    group_id = dict(group_row)['id']
+
+    # Validate date is in current month and in the future
+    try:
+        booking_date = date.fromisoformat(match_date)
+    except ValueError:
+        conn.close()
+        flash('Invalid date.')
+        return redirect(url_for('my_group'))
+
+    if booking_date.month != month or booking_date.year != year:
+        conn.close()
+        flash('Date must be in the current month.')
+        return redirect(url_for('my_group'))
+
+    if booking_date <= date.today():
+        conn.close()
+        flash('Date must be in the future.')
+        return redirect(url_for('my_group'))
+
+    # Check for conflicting bookings for either player
+    cur.execute(f'''
+        SELECT id FROM match_bookings
+        WHERE match_date = {ph} AND status IN ('pending', 'confirmed')
+          AND ((requester_id = {ph} OR opponent_id = {ph}) OR (requester_id = {ph} OR opponent_id = {ph}))
+          AND NOT (end_hour <= {ph} OR start_hour >= {ph})
+    ''', (match_date, current_user.id, current_user.id, opponent_id, opponent_id,
+          start_hour, end_hour))
+    if cur.fetchone():
+        conn.close()
+        flash('One of you already has a booking at that time.')
+        return redirect(url_for('my_group'))
+
+    cur.execute(f'''
+        INSERT INTO match_bookings (group_id, requester_id, opponent_id, match_date, start_hour, end_hour)
+        VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+    ''', (group_id, current_user.id, opponent_id, match_date, start_hour, end_hour))
+    conn.commit()
+    conn.close()
+
+    flash(f'Match time proposed! Waiting for opponent to confirm.')
+    return redirect(url_for('my_group'))
+
+
+@app.route('/booking/<int:booking_id>/confirm', methods=['POST'])
+@login_required
+def booking_confirm(booking_id):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT * FROM match_bookings WHERE id = {ph}', (booking_id,))
+    booking = cur.fetchone()
+    if not booking:
+        conn.close()
+        flash('Booking not found.')
+        return redirect(url_for('my_group'))
+
+    booking = dict(booking)
+    if booking['opponent_id'] != current_user.id:
+        conn.close()
+        flash('Only the invited player can confirm.')
+        return redirect(url_for('my_group'))
+
+    cur.execute(f"UPDATE match_bookings SET status = 'confirmed' WHERE id = {ph}", (booking_id,))
+    conn.commit()
+    conn.close()
+    flash('Match time confirmed!')
+    return redirect(url_for('my_group'))
+
+
+@app.route('/booking/<int:booking_id>/decline', methods=['POST'])
+@login_required
+def booking_decline(booking_id):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT * FROM match_bookings WHERE id = {ph}', (booking_id,))
+    booking = cur.fetchone()
+    if not booking:
+        conn.close()
+        flash('Booking not found.')
+        return redirect(url_for('my_group'))
+
+    booking = dict(booking)
+    if booking['opponent_id'] != current_user.id:
+        conn.close()
+        flash('Only the invited player can decline.')
+        return redirect(url_for('my_group'))
+
+    cur.execute(f"UPDATE match_bookings SET status = 'declined' WHERE id = {ph}", (booking_id,))
+    conn.commit()
+    conn.close()
+    flash('Booking declined.')
+    return redirect(url_for('my_group'))
+
+
+@app.route('/booking/<int:booking_id>/cancel', methods=['POST'])
+@login_required
+def booking_cancel(booking_id):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT * FROM match_bookings WHERE id = {ph}', (booking_id,))
+    booking = cur.fetchone()
+    if not booking:
+        conn.close()
+        flash('Booking not found.')
+        return redirect(url_for('my_group'))
+
+    booking = dict(booking)
+    if booking['requester_id'] != current_user.id:
+        conn.close()
+        flash('Only the requester can cancel.')
+        return redirect(url_for('my_group'))
+
+    cur.execute(f"UPDATE match_bookings SET status = 'cancelled' WHERE id = {ph}", (booking_id,))
+    conn.commit()
+    conn.close()
+    flash('Booking cancelled.')
+    return redirect(url_for('my_group'))
 
 
 # ============ ADMIN ROUTES ============
@@ -1148,7 +1744,7 @@ def admin():
 
     # Get all ladder players with rankings
     cur.execute(f'''
-        SELECT lp.*, u.username, u.email, u.phone, u.ntrp_rating
+        SELECT lp.*, u.username, u.email, u.phone, u.ntrp_rating, u.google_id
         FROM ladder_players lp
         JOIN users u ON lp.user_id = u.id
         WHERE lp.ladder_id = {ph}

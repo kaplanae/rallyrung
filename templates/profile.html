@@ -65,6 +65,47 @@
     </form>
 </div>
 
+<div class="card">
+    <div class="card-header">
+        <h3>Ladder Status</h3>
+    </div>
+    {% if not ladder_player %}
+        <p style="margin-bottom: 12px;">You are not currently on the ladder. Join to start competing!</p>
+        <form method="POST" action="{{ url_for('ladder_join') }}">
+            <div class="form-group">
+                <label>NTRP Rating</label>
+                <select name="ntrp_rating" required>
+                    <option value="">Select your level...</option>
+                    {% for r in ['2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5'] %}
+                        <option value="{{ r }}" {{ 'selected' if current_user.ntrp_rating == r }}>{{ r }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Join Ladder</button>
+        </form>
+    {% elif ladder_player.is_active %}
+        <p style="margin-bottom: 12px;">You are <strong>active</strong> on the ladder at rank <strong>#{{ ladder_player.ranking }}</strong>.</p>
+        <div style="display: flex; gap: 8px;">
+            <form method="POST" action="{{ url_for('ladder_pause') }}">
+                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Pause</button>
+            </form>
+            <form method="POST" action="{{ url_for('ladder_leave') }}" onsubmit="return confirm('Are you sure you want to leave the ladder? Your ranking will be removed.');">
+                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid #e74c3c; color: #e74c3c;">Leave Ladder</button>
+            </form>
+        </div>
+    {% else %}
+        <p style="margin-bottom: 12px;">You are <strong>paused</strong> on the ladder at rank <strong>#{{ ladder_player.ranking }}</strong>. You won't be placed in groups until you resume.</p>
+        <div style="display: flex; gap: 8px;">
+            <form method="POST" action="{{ url_for('ladder_unpause') }}">
+                <button type="submit" class="btn btn-primary btn-sm">Resume</button>
+            </form>
+            <form method="POST" action="{{ url_for('ladder_leave') }}" onsubmit="return confirm('Are you sure you want to leave the ladder? Your ranking will be removed.');">
+                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid #e74c3c; color: #e74c3c;">Leave Ladder</button>
+            </form>
+        </div>
+    {% endif %}
+</div>
+
 {% if ranking_history %}
 <h2 class="section-title" style="margin-top: 32px;">Ranking History</h2>
 <div class="card">

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Availability — RallyRung{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Your Availability</h1>
+<p style="color: var(--text-muted); margin-bottom: 24px;">
+    Set when you're free to play this month ({{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month] }} {{ year }}).
+    Group members will see these when scheduling matches.
+</p>
+
+<div class="card">
+    <div class="card-header">
+        <h3>Quick Fill</h3>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+        Fill multiple dates at once with the same time window.
+    </p>
+    <form method="POST" action="{{ url_for('availability_quick_fill') }}" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+        <div class="form-group" style="margin: 0; min-width: 160px;">
+            <label>Days</label>
+            <select name="pattern" required>
+                <option value="weekdays">Weekdays (Mon–Fri)</option>
+                <option value="weekends">Weekends (Sat–Sun)</option>
+                <option value="all">Every day</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin: 0; min-width: 110px;">
+            <label>From</label>
+            <select name="start_hour" required>
+                {% for h in range(6, 22) %}
+                    <option value="{{ h }}" {{ 'selected' if h == 18 }}>{{ h|format_hour }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin: 0; min-width: 110px;">
+            <label>To</label>
+            <select name="end_hour" required>
+                {% for h in range(8, 23) %}
+                    <option value="{{ h }}" {{ 'selected' if h == 22 }}>{{ h|format_hour }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Fill</button>
+    </form>
+</div>
+
+<div class="card" style="margin-top: 16px;">
+    <div class="card-header">
+        <h3>Add Specific Date</h3>
+    </div>
+    <form method="POST" action="{{ url_for('availability_add') }}" style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+        <div class="form-group" style="margin: 0; min-width: 160px;">
+            <label>Date</label>
+            <select name="available_date" required>
+                <option value="">Select date...</option>
+                {% for d in remaining_dates %}
+                    <option value="{{ d.date }}">{{ d.display }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin: 0; min-width: 110px;">
+            <label>From</label>
+            <select name="start_hour" required>
+                {% for h in range(6, 22) %}
+                    <option value="{{ h }}" {{ 'selected' if h == 18 }}>{{ h|format_hour }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin: 0; min-width: 110px;">
+            <label>To</label>
+            <select name="end_hour" required>
+                {% for h in range(8, 23) %}
+                    <option value="{{ h }}" {{ 'selected' if h == 22 }}>{{ h|format_hour }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+    </form>
+</div>
+
+{% if windows %}
+<div class="card" style="margin-top: 24px;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h3>Your Availability This Month</h3>
+        <form method="POST" action="{{ url_for('availability_clear') }}"
+              onsubmit="return confirm('Clear all availability for this month?')">
+            <button type="submit" class="btn btn-secondary btn-sm">Clear All</button>
+        </form>
+    </div>
+    <table class="ladder-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set current_date = namespace(val='') %}
+            {% for w in windows %}
+            <tr>
+                <td style="font-weight: {{ '600' if w.available_date != current_date.val else '400' }};">
+                    {% if w.available_date != current_date.val %}
+                        {{ w.date_display }}
+                        {% set current_date.val = w.available_date %}
+                    {% endif %}
+                </td>
+                <td>{{ w.start_hour|format_hour }} &ndash; {{ w.end_hour|format_hour }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('availability_delete', avail_id=w.id) }}" class="inline-form">
+                        <button type="submit" class="btn btn-danger btn-sm" style="padding: 2px 8px; font-size: 0.75rem;">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state" style="margin-top: 24px;">
+    <p>No availability set yet. Use Quick Fill or add specific dates above.</p>
+</div>
+{% endif %}
+{% endblock %}

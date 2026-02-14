@@ -34,7 +34,116 @@
     {% endfor %}
 </div>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin: 24px 0 16px;">
+<!-- Scheduling Section -->
+<h2 class="section-title" style="margin-top: 32px;">Schedule a Match</h2>
+
+{% if bookings %}
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header"><h3>Upcoming Bookings</h3></div>
+    {% for b in bookings %}
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
+        <div>
+            <strong>{{ b.requester_name }}</strong> vs <strong>{{ b.opponent_name }}</strong><br>
+            <span style="color: var(--text-muted); font-size: 0.85rem;">
+                {{ b.match_date }} &middot; {{ b.start_hour|format_hour }} &ndash; {{ b.end_hour|format_hour }}
+            </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            {% if b.status == 'confirmed' %}
+                <span class="badge badge-active">confirmed</span>
+            {% elif b.status == 'pending' %}
+                <span class="badge" style="background: rgba(241, 196, 15, 0.15); color: #f1c40f;">pending</span>
+                {% if b.opponent_id == current_user.id %}
+                    <form method="POST" action="{{ url_for('booking_confirm', booking_id=b.id) }}" class="inline-form">
+                        <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('booking_decline', booking_id=b.id) }}" class="inline-form">
+                        <button type="submit" class="btn btn-secondary btn-sm">Decline</button>
+                    </form>
+                {% endif %}
+                {% if b.requester_id == current_user.id %}
+                    <form method="POST" action="{{ url_for('booking_cancel', booking_id=b.id) }}" class="inline-form">
+                        <button type="submit" class="btn btn-secondary btn-sm">Cancel</button>
+                    </form>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">Waiting for confirmation</span>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% for opp_id in opponent_ids %}
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">
+        <h3>{{ opponent_names[opp_id] }}</h3>
+    </div>
+
+    {# Show opponent's availability #}
+    {% if availability.get(opp_id) %}
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Their availability:</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;">
+            {% for a in availability[opp_id] %}
+                <span style="background: var(--bg); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; border: 1px solid var(--border);">
+                    {{ a.date_display }} {{ a.start_hour|format_hour }}&ndash;{{ a.end_hour|format_hour }}
+                </span>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+            No availability set. Ask them to update their <a href="{{ url_for('availability') }}" style="color: var(--accent);">availability</a>.
+        </p>
+    {% endif %}
+
+    {# Show bookable slots #}
+    {% set slots = opponent_slots.get(opp_id, []) %}
+    {% if slots %}
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Available 2-hour slots (overlapping with yours):</p>
+        <div style="max-height: 300px; overflow-y: auto;">
+            <table class="ladder-table" style="font-size: 0.85rem;">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set current_date = namespace(val='') %}
+                    {% for s in slots %}
+                    <tr>
+                        <td style="font-weight: {{ '600' if s.date != current_date.val else '400' }};">
+                            {% if s.date != current_date.val %}
+                                {{ s.date_display }}
+                                {% set current_date.val = s.date %}
+                            {% endif %}
+                        </td>
+                        <td>{{ s.start_hour|format_hour }} &ndash; {{ s.end_hour|format_hour }}</td>
+                        <td>
+                            <form method="POST" action="{{ url_for('book_match') }}" class="inline-form">
+                                <input type="hidden" name="opponent_id" value="{{ opp_id }}">
+                                <input type="hidden" name="match_date" value="{{ s.date }}">
+                                <input type="hidden" name="start_hour" value="{{ s.start_hour }}">
+                                <button type="submit" class="btn btn-primary btn-sm" style="padding: 3px 12px;">Book</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% elif availability.get(opp_id) and availability.get(current_user.id) %}
+        <p style="font-size: 0.85rem; color: var(--text-muted);">No overlapping times found this month.</p>
+    {% elif not availability.get(current_user.id) %}
+        <p style="font-size: 0.85rem; color: var(--text-muted);">
+            Set your <a href="{{ url_for('availability') }}" style="color: var(--accent);">availability</a> to see bookable slots.
+        </p>
+    {% endif %}
+</div>
+{% endfor %}
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin: 32px 0 16px;">
     <h2 class="section-title" style="margin: 0;">Matches</h2>
     <a href="{{ url_for('submit_result') }}" class="btn btn-primary btn-sm">Submit Result</a>
 </div>

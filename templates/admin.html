@@ -79,7 +79,10 @@
                         <button type="submit" class="btn btn-secondary btn-sm" style="padding: 3px 8px;">Set</button>
                     </form>
                 </td>
-                <td>{{ lp.username }}</td>
+                <td>
+                    {{ lp.username }}
+                    {% if lp.google_id %}<span class="badge badge-active" style="font-size: 0.65rem;">logged in</span>{% endif %}
+                </td>
                 <td style="font-size: 0.8rem; color: var(--text-muted);">{{ lp.email or "—" }}</td>
                 <td style="font-size: 0.8rem;">{{ lp.phone or "—" }}</td>
                 <td>{{ lp.ntrp_rating or "—" }}</td>
@@ -140,6 +143,7 @@
                 <td>
                     {{ u.username }}
                     {% if u.is_admin %}<span class="badge badge-admin">admin</span>{% endif %}
+                    {% if u.google_id %}<span class="badge badge-active" style="font-size: 0.65rem;">logged in</span>{% endif %}
                 </td>
                 <td style="font-size: 0.8rem; color: var(--text-muted);">{{ u.email or "—" }}</td>
                 <td>
