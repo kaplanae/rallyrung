@@ -1494,7 +1494,9 @@ def availability_quick_fill():
         flash('Invalid input.')
         return redirect(url_for('availability'))
 
-    if pattern not in ('weekdays', 'weekends', 'all'):
+    valid_patterns = ('weekdays', 'weekends', 'all', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
+    day_map = {'mon': 0, 'tue': 1, 'wed': 2, 'thu': 3, 'fri': 4, 'sat': 5, 'sun': 6}
+    if pattern not in valid_patterns:
         flash('Invalid pattern.')
         return redirect(url_for('availability'))
     if end_hour <= start_hour:
@@ -1518,6 +1520,8 @@ def availability_quick_fill():
         if pattern == 'weekdays' and dow >= 5:
             continue
         if pattern == 'weekends' and dow < 5:
+            continue
+        if pattern in day_map and dow != day_map[pattern]:
             continue
 
         date_str = d.isoformat()
