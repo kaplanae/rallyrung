@@ -53,6 +53,13 @@
                 <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set1_p2" placeholder="Opp" autocomplete="off">
                 <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
             </div>
+            <div class="set-tb-row" id="set1-tb-row" style="display: none; margin-left: 58px; margin-bottom: 10px;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); margin-right: 8px;">TB:</label>
+                <input type="text" inputmode="numeric" maxlength="2" name="set1_tb_you" placeholder="You" autocomplete="off" style="width: 45px; padding: 6px; text-align: center; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem;">
+                <span class="dash" style="margin: 0 4px;">-</span>
+                <input type="text" inputmode="numeric" maxlength="2" name="set1_tb_opp" placeholder="Opp" autocomplete="off" style="width: 45px; padding: 6px; text-align: center; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem;">
+                <input type="hidden" name="set1_tb">
+            </div>
 
             <div class="set-score-row" id="set2-row">
                 <label>Set 2</label>
@@ -61,13 +68,21 @@
                 <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set2_p2" placeholder="Opp" autocomplete="off">
                 <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
             </div>
+            <div class="set-tb-row" id="set2-tb-row" style="display: none; margin-left: 58px; margin-bottom: 10px;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); margin-right: 8px;">TB:</label>
+                <input type="text" inputmode="numeric" maxlength="2" name="set2_tb_you" placeholder="You" autocomplete="off" style="width: 45px; padding: 6px; text-align: center; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem;">
+                <span class="dash" style="margin: 0 4px;">-</span>
+                <input type="text" inputmode="numeric" maxlength="2" name="set2_tb_opp" placeholder="Opp" autocomplete="off" style="width: 45px; padding: 6px; text-align: center; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem;">
+                <input type="hidden" name="set2_tb">
+            </div>
 
             <div class="set-score-row" id="set3-row" style="display: none;">
-                <label>Set 3</label>
-                <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set3_p1" placeholder="You" autocomplete="off">
+                <label>TB</label>
+                <input type="text" inputmode="numeric" maxlength="2" name="set3_p1" placeholder="You" autocomplete="off">
                 <span class="dash">—</span>
-                <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set3_p2" placeholder="Opp" autocomplete="off">
+                <input type="text" inputmode="numeric" maxlength="2" name="set3_p2" placeholder="Opp" autocomplete="off">
                 <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
+                <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 4px;">first to 10</span>
             </div>
         </div>
 
@@ -88,6 +103,8 @@ const scoresSection = document.getElementById('scores-section');
 const set1Row = document.getElementById('set1-row');
 const set2Row = document.getElementById('set2-row');
 const set3Row = document.getElementById('set3-row');
+const set1TbRow = document.getElementById('set1-tb-row');
+const set2TbRow = document.getElementById('set2-tb-row');
 const setStatus = document.getElementById('set-status');
 
 const myId = '{{ current_user.id }}';
@@ -103,6 +120,25 @@ function isValidSet(a, b) {
     return VALID_SCORES.some(v => v[0] === a && v[1] === b);
 }
 
+function isValidTiebreak(a, b) {
+    if (a < 0 || b < 0) return false;
+    const high = Math.max(a, b), low = Math.min(a, b);
+    const diff = high - low;
+    if (diff < 2) return false;
+    // 10-point match tiebreak
+    if (high === 10 && low <= 8) return true;
+    if (high > 10 && low === high - 2 && low >= 9) return true;
+    // 7-point match tiebreak
+    if (high === 7 && low <= 5) return true;
+    if (high > 7 && high < 10 && low === high - 2 && low >= 6) return true;
+    return false;
+}
+
+function isSetTiebreak(a, b) {
+    // 7-6 or 6-7
+    return (a === 7 && b === 6) || (a === 6 && b === 7);
+}
+
 function getSetScores(setNum) {
     const p1 = document.querySelector(`[name="set${setNum}_p1"]`).value.trim();
     const p2 = document.querySelector(`[name="set${setNum}_p2"]`).value.trim();
@@ -110,7 +146,6 @@ function getSetScores(setNum) {
     return [parseInt(p1), parseInt(p2)];
 }
 
-// "You" won if your score > opponent score
 function youWonSet(scores) {
     return scores[0] > scores[1];
 }
@@ -126,6 +161,12 @@ function getWinnerId() {
     return winnerSelect.value || null;
 }
 
+function syncTbHidden(setNum) {
+    const you = document.querySelector(`[name="set${setNum}_tb_you"]`).value.trim();
+    const opp = document.querySelector(`[name="set${setNum}_tb_opp"]`).value.trim();
+    document.querySelector(`[name="set${setNum}_tb"]`).value = (you && opp) ? `${you}-${opp}` : '';
+}
+
 function updateScores() {
     const outcome = outcomeSelect.value;
     if (outcome !== 'completed') return;
@@ -136,71 +177,69 @@ function updateScores() {
     const s1 = getSetScores(1);
     const s2 = getSetScores(2);
 
-    // Validate set 1
-    const v1 = set1Row.querySelector('.set-validation');
-    if (s1) {
-        if (isValidSet(s1[0], s1[1])) {
-            v1.textContent = '✓';
-            v1.style.color = '#2ecc71';
-        } else {
-            v1.textContent = 'Invalid';
-            v1.style.color = '#e74c3c';
-        }
-    } else {
-        v1.textContent = '';
-    }
+    // Validate and show/hide tiebreak rows for sets 1 & 2
+    [1, 2].forEach(setNum => {
+        const s = setNum === 1 ? s1 : s2;
+        const row = setNum === 1 ? set1Row : set2Row;
+        const tbRow = setNum === 1 ? set1TbRow : set2TbRow;
+        const v = row.querySelector('.set-validation');
 
-    // Validate set 2
-    const v2 = set2Row.querySelector('.set-validation');
-    if (s2) {
-        if (isValidSet(s2[0], s2[1])) {
-            v2.textContent = '✓';
-            v2.style.color = '#2ecc71';
+        if (s) {
+            if (isValidSet(s[0], s[1])) {
+                v.textContent = '✓';
+                v.style.color = '#2ecc71';
+                // Show tiebreak input if 7-6
+                if (isSetTiebreak(s[0], s[1])) {
+                    tbRow.style.display = 'flex';
+                    tbRow.style.alignItems = 'center';
+                } else {
+                    tbRow.style.display = 'none';
+                    tbRow.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
+                    document.querySelector(`[name="set${setNum}_tb"]`).value = '';
+                }
+            } else {
+                v.textContent = 'Invalid';
+                v.style.color = '#e74c3c';
+                tbRow.style.display = 'none';
+            }
         } else {
-            v2.textContent = 'Invalid';
-            v2.style.color = '#e74c3c';
+            v.textContent = '';
+            tbRow.style.display = 'none';
         }
-    } else {
-        v2.textContent = '';
-    }
+    });
 
-    // Show set status and decide if set 3 is needed
+    // Show set status and decide if match tiebreak is needed
     if (s1 && s2 && isValidSet(s1[0], s1[1]) && isValidSet(s2[0], s2[1])) {
         const mySetWins = (youWonSet(s1) ? 1 : 0) + (youWonSet(s2) ? 1 : 0);
         const oppSetWins = 2 - mySetWins;
         const winnerName = getWinnerName();
 
         if (mySetWins === 1 && oppSetWins === 1) {
-            // Split — show set 3
+            // Split — show match tiebreak
             set3Row.style.display = '';
-            setStatus.textContent = 'Sets tied 1-1 — enter deciding set';
+            setStatus.textContent = 'Sets tied 1-1 — enter match tiebreak';
             setStatus.style.display = '';
 
-            // Validate set 3
             const s3 = getSetScores(3);
             const v3 = set3Row.querySelector('.set-validation');
             if (s3) {
-                if (isValidSet(s3[0], s3[1])) {
+                if (isValidTiebreak(s3[0], s3[1])) {
                     v3.textContent = '✓';
                     v3.style.color = '#2ecc71';
+                    if (winnerName) {
+                        const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
+                        const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
+                        setStatus.textContent = `${winnerName} wins ${winnerIsMe ? finalMyWins : finalOppWins}-${winnerIsMe ? finalOppWins : finalMyWins}`;
+                    }
                 } else {
                     v3.textContent = 'Invalid';
                     v3.style.color = '#e74c3c';
-                }
-
-                // Update status with final result
-                if (isValidSet(s3[0], s3[1])) {
-                    const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
-                    const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
-                    if (winnerName) {
-                        setStatus.textContent = `${winnerName} wins ${winnerIsMe ? finalMyWins : finalOppWins}-${winnerIsMe ? finalOppWins : finalMyWins}`;
-                    }
                 }
             } else {
                 v3.textContent = '';
             }
         } else {
-            // Straight sets — hide set 3, clear its values
+            // Straight sets — hide match tiebreak
             set3Row.style.display = 'none';
             set3Row.querySelectorAll('input').forEach(inp => inp.value = '');
             set3Row.querySelector('.set-validation').textContent = '';
@@ -221,25 +260,22 @@ function updateScores() {
 function updateFormState() {
     const outcome = outcomeSelect.value;
 
-    // Reset all
     winnerGroup.style.display = '';
     winnerSelect.required = true;
     scoresSection.style.display = '';
     set3Row.style.display = 'none';
+    set1TbRow.style.display = 'none';
+    set2TbRow.style.display = 'none';
     setStatus.style.display = 'none';
 
     if (outcome === 'completed') {
-        // Full match: require winner + sets
         updateScores();
     } else if (outcome === 'forfeit' || outcome === 'injury_not_played') {
-        // Winner only, no scores
         scoresSection.style.display = 'none';
         scoresSection.querySelectorAll('input').forEach(inp => inp.value = '');
     } else if (outcome === 'injury_not_finished') {
-        // Winner + optional partial scores (no special validation)
         set3Row.style.display = '';
     } else if (outcome === 'schedule_problem' || outcome === 'weather_problem') {
-        // No winner, no scores
         winnerGroup.style.display = 'none';
         winnerSelect.required = false;
         winnerSelect.value = '';
@@ -251,12 +287,22 @@ function updateFormState() {
 outcomeSelect.addEventListener('change', updateFormState);
 winnerSelect.addEventListener('change', updateScores);
 
-// Listen on all score inputs
+// Listen on all score inputs (sets)
 document.querySelectorAll('.set-score-row input').forEach(inp => {
     inp.addEventListener('input', function() {
-        // Only allow single digit 0-7
-        this.value = this.value.replace(/[^0-7]/g, '').slice(0, 1);
+        // Allow digits only; max 1 for sets 1-2, max 2 for tiebreak
+        const max = this.closest('#set3-row') ? 2 : 1;
+        this.value = this.value.replace(/[^0-9]/g, '').slice(0, max);
         updateScores();
+    });
+});
+
+// Listen on tiebreak detail inputs
+document.querySelectorAll('.set-tb-row input[type="text"]').forEach(inp => {
+    inp.addEventListener('input', function() {
+        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 2);
+        const setNum = this.closest('#set1-tb-row') ? 1 : 2;
+        syncTbHidden(setNum);
     });
 });
 
@@ -279,19 +325,19 @@ document.getElementById('result-form').addEventListener('submit', function(e) {
         const s2 = getSetScores(2);
 
         if (!s1 || !s2) {
-            alert('Please enter scores for at least 2 sets.');
+            alert('Please enter scores for both sets.');
             e.preventDefault();
             return;
         }
 
         if (!isValidSet(s1[0], s1[1])) {
-            alert(`Set 1 score ${s1[0]}-${s1[1]} is not valid.\n\nWin to 6 (up to 6-4) or 7 (7-5, 7-6).`);
+            alert(`Set 1 score ${s1[0]}-${s1[1]} is not valid.\n\nWin to 6 (up to 6-4), 7-5, or 7-6.`);
             e.preventDefault();
             return;
         }
 
         if (!isValidSet(s2[0], s2[1])) {
-            alert(`Set 2 score ${s2[0]}-${s2[1]} is not valid.\n\nWin to 6 (up to 6-4) or 7 (7-5, 7-6).`);
+            alert(`Set 2 score ${s2[0]}-${s2[1]} is not valid.\n\nWin to 6 (up to 6-4), 7-5, or 7-6.`);
             e.preventDefault();
             return;
         }
@@ -302,15 +348,14 @@ document.getElementById('result-form').addEventListener('submit', function(e) {
         let oppSetWins = 2 - mySetWins;
 
         if (mySetWins === 1 && oppSetWins === 1) {
-            // Need set 3
             const s3 = getSetScores(3);
             if (!s3) {
-                alert('Sets are split 1-1 — please enter a 3rd set.');
+                alert('Sets are split 1-1 — please enter the match tiebreak score.');
                 e.preventDefault();
                 return;
             }
-            if (!isValidSet(s3[0], s3[1])) {
-                alert(`Set 3 score ${s3[0]}-${s3[1]} is not valid.\n\nWin to 6 (up to 6-4) or 7 (7-5, 7-6).`);
+            if (!isValidTiebreak(s3[0], s3[1])) {
+                alert(`Tiebreak score ${s3[0]}-${s3[1]} is not valid.\n\nFirst to 10 (or 7), win by 2.`);
                 e.preventDefault();
                 return;
             }
@@ -326,6 +371,10 @@ document.getElementById('result-form').addEventListener('submit', function(e) {
             e.preventDefault();
             return;
         }
+
+        // Sync tiebreak hidden fields before submit
+        syncTbHidden(1);
+        syncTbHidden(2);
     }
 
     if (outcome === 'injury_not_finished') {

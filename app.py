@@ -198,6 +198,7 @@ def init_db():
             set1_p1 INTEGER, set1_p2 INTEGER,
             set2_p1 INTEGER, set2_p2 INTEGER,
             set3_p1 INTEGER, set3_p2 INTEGER,
+            set1_tb TEXT, set2_tb TEXT,
             submitted_by INTEGER REFERENCES users(id),
             confirmed_by INTEGER REFERENCES users(id),
             status TEXT DEFAULT 'pending',
@@ -299,6 +300,7 @@ def init_db():
             set1_p1 INTEGER, set1_p2 INTEGER,
             set2_p1 INTEGER, set2_p2 INTEGER,
             set3_p1 INTEGER, set3_p2 INTEGER,
+            set1_tb TEXT, set2_tb TEXT,
             submitted_by INTEGER REFERENCES users(id),
             confirmed_by INTEGER REFERENCES users(id),
             status TEXT DEFAULT 'pending',
@@ -357,6 +359,16 @@ def init_db():
         conn.rollback()
     try:
         cur.execute("ALTER TABLE ladder_players ADD COLUMN inactive_months INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        cur.execute("ALTER TABLE matches ADD COLUMN set1_tb TEXT")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        cur.execute("ALTER TABLE matches ADD COLUMN set2_tb TEXT")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -727,6 +739,31 @@ def validate_set_score(p1, p2):
     valid_scores.add((7, 6))
     valid_scores.add((6, 7))
     return (p1, p2) in valid_scores
+
+
+def validate_tiebreak_score(p1, p2):
+    """Validate a match tiebreak score (3rd set). First to 10 or 7, win by 2."""
+    if p1 is None or p2 is None:
+        return True
+    if not (isinstance(p1, int) and isinstance(p2, int)):
+        return False
+    if p1 < 0 or p2 < 0:
+        return False
+    high, low = max(p1, p2), min(p1, p2)
+    diff = high - low
+    if diff < 2:
+        return False
+    # 10-point match tiebreak
+    if high == 10 and low <= 8:
+        return True
+    if high > 10 and low == high - 2 and low >= 9:
+        return True
+    # 7-point match tiebreak
+    if high == 7 and low <= 5:
+        return True
+    if 7 < high < 10 and low == high - 2 and low >= 6:
+        return True
+    return False
 
 
 def calculate_match_games(match):
@@ -1123,18 +1160,22 @@ def ladder():
             return ''
         sets = []
         if match.get('set1_p1') is not None:
-            if match['player1_id'] == p1['id']:
-                sets.append(f"{match['set1_p1']}-{match['set1_p2']}")
-                if match.get('set2_p1') is not None:
-                    sets.append(f"{match['set2_p1']}-{match['set2_p2']}")
-                if match.get('set3_p1') is not None:
-                    sets.append(f"{match['set3_p1']}-{match['set3_p2']}")
-            else:
-                sets.append(f"{match['set1_p2']}-{match['set1_p1']}")
-                if match.get('set2_p1') is not None:
-                    sets.append(f"{match['set2_p2']}-{match['set2_p1']}")
-                if match.get('set3_p1') is not None:
-                    sets.append(f"{match['set3_p2']}-{match['set3_p1']}")
+            is_p1 = match['player1_id'] == p1['id']
+            for s in range(1, 4):
+                sp1 = match.get(f'set{s}_p1')
+                sp2 = match.get(f'set{s}_p2')
+                if sp1 is None:
+                    break
+                a, b = (sp1, sp2) if is_p1 else (sp2, sp1)
+                score = f"{a}-{b}"
+                # Add tiebreak detail for 7-6 sets
+                tb = match.get(f'set{s}_tb') if s <= 2 else None
+                if tb:
+                    parts = tb.split('-')
+                    if len(parts) == 2:
+                        tb_a, tb_b = (parts[0], parts[1]) if is_p1 else (parts[1], parts[0])
+                        score += f"({tb_a})"
+                sets.append(score)
         return '  '.join(sets)
 
     ladder_groups = []
@@ -1333,10 +1374,15 @@ def submit_result():
                         flash(f'Set {s} scores must be numbers.')
                         conn.close()
                         return redirect(url_for('submit_result'))
-                    if outcome_type == 'completed' and not validate_set_score(p1_val, p2_val):
-                        flash(f'Set {s} score {p1_val}-{p2_val} is not a valid tennis score.')
-                        conn.close()
-                        return redirect(url_for('submit_result'))
+                    if outcome_type == 'completed':
+                        if s <= 2 and not validate_set_score(p1_val, p2_val):
+                            flash(f'Set {s} score {p1_val}-{p2_val} is not a valid tennis score.')
+                            conn.close()
+                            return redirect(url_for('submit_result'))
+                        if s == 3 and not validate_tiebreak_score(p1_val, p2_val):
+                            flash(f'Tiebreak score {p1_val}-{p2_val} is not valid. Must be first to 10 or 7, win by 2.')
+                            conn.close()
+                            return redirect(url_for('submit_result'))
                     sets[s - 1] = (p1_val, p2_val)
 
             if outcome_type == 'completed':
@@ -1356,6 +1402,10 @@ def submit_result():
             conn.close()
             return redirect(url_for('my_group'))
 
+        # Parse set tiebreak scores (for 7-6 sets)
+        set1_tb = request.form.get('set1_tb', '').strip() or None
+        set2_tb = request.form.get('set2_tb', '').strip() or None
+
         # Order players so player1 is always the lower id for consistency
         if current_user.id < opponent_id:
             p1_id, p2_id = current_user.id, opponent_id
@@ -1367,14 +1417,25 @@ def submit_result():
             s1_p1, s1_p2 = (sets[0][1], sets[0][0]) if sets[0][0] is not None else (None, None)
             s2_p1, s2_p2 = (sets[1][1], sets[1][0]) if sets[1][0] is not None else (None, None)
             s3_p1, s3_p2 = (sets[2][1], sets[2][0]) if sets[2][0] is not None else (None, None)
+            # Flip tiebreak scores too
+            if set1_tb:
+                parts = set1_tb.split('-')
+                if len(parts) == 2:
+                    set1_tb = f"{parts[1]}-{parts[0]}"
+            if set2_tb:
+                parts = set2_tb.split('-')
+                if len(parts) == 2:
+                    set2_tb = f"{parts[1]}-{parts[0]}"
 
         cur.execute(f'''
             INSERT INTO matches (group_id, player1_id, player2_id, winner_id,
                 set1_p1, set1_p2, set2_p1, set2_p2, set3_p1, set3_p2,
+                set1_tb, set2_tb,
                 submitted_by, status, outcome_type)
-            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, 'pending', {ph})
+            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, 'pending', {ph})
         ''', (group['id'], p1_id, p2_id, winner_id,
-              s1_p1, s1_p2, s2_p1, s2_p2, s3_p1, s3_p2, current_user.id, outcome_type))
+              s1_p1, s1_p2, s2_p1, s2_p2, s3_p1, s3_p2,
+              set1_tb, set2_tb, current_user.id, outcome_type))
         conn.commit()
         conn.close()
         flash('Match result submitted! Waiting for opponent to confirm.')
