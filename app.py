@@ -11,9 +11,12 @@ from calendar import monthrange
 from collections import defaultdict
 import os
 import uuid
+import resend
 from dotenv import load_dotenv
 
 load_dotenv()
+
+resend.api_key = os.environ.get('RESEND_API_KEY')
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'rallyrung-dev-secret-key-change-in-production')
@@ -53,6 +56,33 @@ else:
 
 def get_placeholder():
     return '%s' if USE_POSTGRES else '?'
+
+
+def send_email(to, subject, html):
+    """Send an email via Resend. Skips silently if no API key (dev mode)."""
+    if not resend.api_key:
+        return False
+    try:
+        resend.Emails.send({
+            "from": "RallyRung <noreply@rallyrung.com>",
+            "to": [to] if isinstance(to, str) else to,
+            "subject": subject,
+            "html": html
+        })
+        return True
+    except Exception as e:
+        print(f"Email send error: {e}")
+        return False
+
+
+def email_wrap(body_html, footer_text="Texas Tennis Ladder — rallyrung.com"):
+    """Wrap email body in a consistent layout."""
+    return f'''<div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
+  <h2 style="color: #e74c3c;">RallyRung</h2>
+  {body_html}
+  <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
+  <p style="color: #999; font-size: 12px;">{footer_text}</p>
+</div>'''
 
 
 def get_db():
@@ -143,6 +173,7 @@ def init_db():
             ladder_id INTEGER NOT NULL REFERENCES ladders(id),
             ranking INTEGER NOT NULL,
             is_active BOOLEAN DEFAULT TRUE,
+            inactive_months INTEGER DEFAULT 0,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, ladder_id)
         )''')
@@ -170,6 +201,7 @@ def init_db():
             submitted_by INTEGER REFERENCES users(id),
             confirmed_by INTEGER REFERENCES users(id),
             status TEXT DEFAULT 'pending',
+            outcome_type TEXT DEFAULT 'completed',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
@@ -242,6 +274,7 @@ def init_db():
             ladder_id INTEGER NOT NULL REFERENCES ladders(id),
             ranking INTEGER NOT NULL,
             is_active INTEGER DEFAULT 1,
+            inactive_months INTEGER DEFAULT 0,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, ladder_id)
         )''')
@@ -269,6 +302,7 @@ def init_db():
             submitted_by INTEGER REFERENCES users(id),
             confirmed_by INTEGER REFERENCES users(id),
             status TEXT DEFAULT 'pending',
+            outcome_type TEXT DEFAULT 'completed',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
@@ -315,10 +349,30 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
-    # Seed default ladder
+    # Migrations: add columns if missing (idempotent)
+    try:
+        cur.execute("ALTER TABLE matches ADD COLUMN outcome_type TEXT DEFAULT 'completed'")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        cur.execute("ALTER TABLE ladder_players ADD COLUMN inactive_months INTEGER DEFAULT 0")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+    # Seed default ladders (idempotent)
     cur.execute('SELECT id FROM ladders LIMIT 1')
     if not cur.fetchone():
-        cur.execute("INSERT INTO ladders (name, sport) VALUES ('RallyRung Tennis Ladder', 'tennis')")
+        cur.execute("INSERT INTO ladders (name, sport) VALUES ('Cedar Park', 'tennis')")
+    else:
+        # Rename legacy ladder name if needed
+        cur.execute(f"UPDATE ladders SET name = 'Cedar Park' WHERE name = 'RallyRung Tennis Ladder'")
+
+    # Add Austin ladder if it doesn't exist
+    cur.execute(f"SELECT id FROM ladders WHERE name = 'Austin'")
+    if not cur.fetchone():
+        cur.execute("INSERT INTO ladders (name, sport) VALUES ('Austin', 'tennis')")
 
     conn.commit()
 
@@ -535,13 +589,70 @@ def get_current_month_year():
 
 
 def get_ladder_id():
-    """Get the default ladder id."""
+    """Get the user's active ladder id from session, falling back to their first ladder membership."""
+    # Check session first
+    ladder_id = session.get('ladder_id')
+    if ladder_id:
+        return ladder_id
+
+    # If logged in, try to get their first ladder membership
+    if current_user.is_authenticated:
+        conn = get_db()
+        cur = conn.cursor()
+        ph = get_placeholder()
+        cur.execute(f'SELECT ladder_id FROM ladder_players WHERE user_id = {ph} ORDER BY ladder_id ASC LIMIT 1',
+                    (current_user.id,))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            ladder_id = dict(row)['ladder_id']
+            session['ladder_id'] = ladder_id
+            return ladder_id
+
+    # Final fallback: first ladder in DB
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('SELECT id FROM ladders LIMIT 1')
+    cur.execute('SELECT id FROM ladders ORDER BY id ASC LIMIT 1')
     row = cur.fetchone()
     conn.close()
     return dict(row)['id'] if row else None
+
+
+def get_all_ladders():
+    """Get all available ladders."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM ladders ORDER BY id ASC')
+    ladders = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return ladders
+
+
+def get_ladder_name(ladder_id):
+    """Get the name of a ladder by id."""
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'SELECT name FROM ladders WHERE id = {ph}', (ladder_id,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row)['name'] if row else 'Unknown'
+
+
+def get_user_ladders(user_id):
+    """Get all ladders a user belongs to."""
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'''
+        SELECT l.* FROM ladders l
+        JOIN ladder_players lp ON l.id = lp.ladder_id
+        WHERE lp.user_id = {ph}
+        ORDER BY l.id ASC
+    ''', (user_id,))
+    ladders = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return ladders
 
 
 def get_or_create_user_by_google(google_id, email, name, picture):
@@ -589,6 +700,15 @@ def require_admin(f):
     return decorated
 
 
+@app.context_processor
+def inject_ladder_context():
+    """Inject current ladder name into all templates."""
+    ladder_id = session.get('ladder_id')
+    if ladder_id:
+        return {'current_ladder_name': get_ladder_name(ladder_id)}
+    return {'current_ladder_name': ''}
+
+
 def validate_set_score(p1, p2):
     """Validate a single set score follows tennis rules."""
     if p1 is None or p2 is None:
@@ -610,8 +730,20 @@ def validate_set_score(p1, p2):
 
 
 def calculate_match_games(match):
-    """Calculate total games won by each player in a match."""
+    """Calculate total games won by each player in a match.
+    Forfeits and injury_not_played count as 12-0 for the winner."""
     m = dict(match)
+    outcome = m.get('outcome_type', 'completed')
+
+    if outcome in ('forfeit', 'injury_not_played'):
+        # Winner gets 12-0 game credit
+        winner = m.get('winner_id')
+        if winner == m['player1_id']:
+            return 12, 0
+        elif winner == m['player2_id']:
+            return 0, 12
+        return 0, 0
+
     p1_games = 0
     p2_games = 0
     for s in range(1, 4):
@@ -621,6 +753,32 @@ def calculate_match_games(match):
             p1_games += s1
             p2_games += s2
     return p1_games, p2_games
+
+
+def calculate_sets_won_lost(match):
+    """Calculate sets won by each player in a match. Returns (p1_sets, p2_sets)."""
+    m = dict(match)
+    outcome = m.get('outcome_type', 'completed')
+
+    if outcome in ('forfeit', 'injury_not_played'):
+        winner = m.get('winner_id')
+        if winner == m['player1_id']:
+            return 2, 0
+        elif winner == m['player2_id']:
+            return 0, 2
+        return 0, 0
+
+    p1_sets = 0
+    p2_sets = 0
+    for s in range(1, 4):
+        s1 = m.get(f'set{s}_p1')
+        s2 = m.get(f'set{s}_p2')
+        if s1 is not None and s2 is not None:
+            if s1 > s2:
+                p1_sets += 1
+            elif s2 > s1:
+                p2_sets += 1
+    return p1_sets, p2_sets
 
 
 def get_group_standings(group_id):
@@ -643,20 +801,31 @@ def get_group_standings(group_id):
     stats = {}
     for pid in player_ids:
         if pid:
-            stats[pid] = {'wins': 0, 'losses': 0, 'games_won': 0, 'games_lost': 0}
+            stats[pid] = {'wins': 0, 'losses': 0, 'games_won': 0, 'games_lost': 0,
+                          'sets_won': 0, 'sets_lost': 0}
 
     for m in matches:
+        outcome = m.get('outcome_type', 'completed')
+        # Skip matches with no winner (schedule/weather problems)
+        if outcome in ('schedule_problem', 'weather_problem'):
+            continue
+
         p1 = m['player1_id']
         p2 = m['player2_id']
         winner = m['winner_id']
         p1_games, p2_games = calculate_match_games(m)
+        p1_sets, p2_sets = calculate_sets_won_lost(m)
 
         if p1 in stats:
             stats[p1]['games_won'] += p1_games
             stats[p1]['games_lost'] += p2_games
+            stats[p1]['sets_won'] += p1_sets
+            stats[p1]['sets_lost'] += p2_sets
         if p2 in stats:
             stats[p2]['games_won'] += p2_games
             stats[p2]['games_lost'] += p1_games
+            stats[p2]['sets_won'] += p2_sets
+            stats[p2]['sets_lost'] += p1_sets
 
         if winner == p1:
             if p1 in stats: stats[p1]['wins'] += 1
@@ -763,7 +932,13 @@ def google_callback():
                 is_active=bool(user_data.get('is_active', True))
             )
             login_user(user)
-            return redirect(url_for('ladder'))
+            # Set ladder in session based on membership
+            user_ladders = get_user_ladders(user.id)
+            if user_ladders:
+                session['ladder_id'] = user_ladders[0]['id']
+                return redirect(url_for('ladder'))
+            else:
+                return redirect(url_for('choose_ladder'))
     except Exception as e:
         print(f"OAuth error: {e}")
     return redirect(url_for('index'))
@@ -821,14 +996,46 @@ def magic_login(token):
     )
     login_user(user)
     flash(f'Welcome, {user.username}!')
-    return redirect(url_for('ladder'))
+    # Set ladder in session based on membership
+    user_ladders = get_user_ladders(user.id)
+    if user_ladders:
+        session['ladder_id'] = user_ladders[0]['id']
+        return redirect(url_for('ladder'))
+    else:
+        return redirect(url_for('choose_ladder'))
 
 
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
+    session.pop('ladder_id', None)
     return redirect(url_for('index'))
+
+
+@app.route('/choose-ladder')
+@login_required
+def choose_ladder():
+    ladders = get_all_ladders()
+    user_ladders = get_user_ladders(current_user.id)
+    user_ladder_ids = [l['id'] for l in user_ladders]
+    return render_template('choose_ladder.html', ladders=ladders, user_ladder_ids=user_ladder_ids)
+
+
+@app.route('/switch-ladder/<int:ladder_id>')
+@login_required
+def switch_ladder(ladder_id):
+    # Verify ladder exists
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'SELECT id FROM ladders WHERE id = {ph}', (ladder_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        session['ladder_id'] = ladder_id
+        flash(f'Switched to {get_ladder_name(ladder_id)} ladder.')
+    return redirect(url_for('ladder'))
 
 
 # ============ API ROUTES ============
@@ -854,6 +1061,11 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/rules')
+def rules():
+    return render_template('rules.html')
+
+
 @app.route('/ladder')
 def ladder():
     conn = get_db()
@@ -864,7 +1076,7 @@ def ladder():
 
     # Get all active players with their rankings
     cur.execute('''
-        SELECT u.id, u.username, u.profile_picture, u.ntrp_rating,
+        SELECT u.id, u.username, u.profile_picture, u.ntrp_rating, u.gender,
                lp.ranking, lp.is_active
         FROM ladder_players lp
         JOIN users u ON lp.user_id = u.id
@@ -873,7 +1085,10 @@ def ladder():
     '''.replace('%s', ph), (ladder_id, True if USE_POSTGRES else 1))
     players = [dict(r) for r in cur.fetchall()]
 
-    # Get current month groups
+    # Build player lookup by id
+    player_map = {p['id']: p for p in players}
+
+    # Get current month groups and their matches
     cur.execute(f'''
         SELECT mg.*, u1.username as p1_name, u2.username as p2_name, u3.username as p3_name
         FROM monthly_groups mg
@@ -891,8 +1106,57 @@ def ladder():
         g['matches'] = [dict(r) for r in cur.fetchall()]
         g['standings'] = get_group_standings(g['id'])
 
+    # Build a match lookup: (player1_id, player2_id) -> match (unordered)
+    match_lookup = {}
+    for g in groups:
+        for m in g['matches']:
+            key = tuple(sorted([m['player1_id'], m['player2_id']]))
+            match_lookup[key] = m
+
+    # Build ladder groups of 3 with one row per player
+    # Each player appears once on the left with their ranking,
+    # opponent rotates: 1v2, 2v3, 3v1 — covers all 3 matchups
+    def get_score(p1, p2):
+        key = tuple(sorted([p1['id'], p2['id']]))
+        match = match_lookup.get(key)
+        if not match or match.get('status') not in ('confirmed', 'pending'):
+            return ''
+        sets = []
+        if match.get('set1_p1') is not None:
+            if match['player1_id'] == p1['id']:
+                sets.append(f"{match['set1_p1']}-{match['set1_p2']}")
+                if match.get('set2_p1') is not None:
+                    sets.append(f"{match['set2_p1']}-{match['set2_p2']}")
+                if match.get('set3_p1') is not None:
+                    sets.append(f"{match['set3_p1']}-{match['set3_p2']}")
+            else:
+                sets.append(f"{match['set1_p2']}-{match['set1_p1']}")
+                if match.get('set2_p1') is not None:
+                    sets.append(f"{match['set2_p2']}-{match['set2_p1']}")
+                if match.get('set3_p1') is not None:
+                    sets.append(f"{match['set3_p2']}-{match['set3_p1']}")
+        return '  '.join(sets)
+
+    ladder_groups = []
+    for i in range(0, len(players), 3):
+        gp = players[i:i+3]
+        rows = []
+        if len(gp) == 3:
+            # 1v2, 2v3, 3v1
+            rows.append({'player': gp[0], 'opponent': gp[1], 'score': get_score(gp[0], gp[1])})
+            rows.append({'player': gp[1], 'opponent': gp[2], 'score': get_score(gp[1], gp[2])})
+            rows.append({'player': gp[2], 'opponent': gp[0], 'score': get_score(gp[2], gp[0])})
+        elif len(gp) == 2:
+            rows.append({'player': gp[0], 'opponent': gp[1], 'score': get_score(gp[0], gp[1])})
+            rows.append({'player': gp[1], 'opponent': gp[0], 'score': get_score(gp[1], gp[0])})
+        elif len(gp) == 1:
+            rows.append({'player': gp[0], 'opponent': None, 'score': ''})
+        ladder_groups.append({'number': i // 3 + 1, 'rows': rows})
+
     conn.close()
-    return render_template('ladder.html', players=players, groups=groups, month=month, year=year)
+    ladder_name = get_ladder_name(ladder_id)
+    return render_template('ladder.html', players=players, ladder_groups=ladder_groups,
+                           groups=groups, month=month, year=year, ladder_name=ladder_name)
 
 
 @app.route('/my-group')
@@ -1027,43 +1291,59 @@ def submit_result():
 
     if request.method == 'POST':
         opponent_id = int(request.form.get('opponent_id', 0))
-        winner_id = int(request.form.get('winner_id', 0))
+        outcome_type = request.form.get('outcome_type', 'completed')
+        valid_outcomes = ('completed', 'forfeit', 'schedule_problem', 'weather_problem',
+                          'injury_not_finished', 'injury_not_played')
 
         if opponent_id not in opponent_ids:
             flash('Invalid opponent.')
             conn.close()
             return redirect(url_for('submit_result'))
 
-        if winner_id not in (current_user.id, opponent_id):
-            flash('Invalid winner.')
+        if outcome_type not in valid_outcomes:
+            flash('Invalid outcome type.')
             conn.close()
             return redirect(url_for('submit_result'))
 
-        # Parse set scores
-        sets = []
-        for s in range(1, 4):
-            p1_score = request.form.get(f'set{s}_p1', '')
-            p2_score = request.form.get(f'set{s}_p2', '')
-            if p1_score and p2_score:
-                try:
-                    p1_val = int(p1_score)
-                    p2_val = int(p2_score)
-                except ValueError:
-                    flash(f'Set {s} scores must be numbers.')
-                    conn.close()
-                    return redirect(url_for('submit_result'))
-                if not validate_set_score(p1_val, p2_val):
-                    flash(f'Set {s} score {p1_val}-{p2_val} is not a valid tennis score.')
-                    conn.close()
-                    return redirect(url_for('submit_result'))
-                sets.append((p1_val, p2_val))
-            else:
-                sets.append((None, None))
+        # No-winner outcomes: schedule_problem, weather_problem
+        no_winner_outcomes = ('schedule_problem', 'weather_problem')
+        # Winner-only outcomes (no scores): forfeit, injury_not_played
+        winner_only_outcomes = ('forfeit', 'injury_not_played')
 
-        if sets[0] == (None, None) or sets[1] == (None, None):
-            flash('At least 2 sets are required.')
-            conn.close()
-            return redirect(url_for('submit_result'))
+        if outcome_type in no_winner_outcomes:
+            winner_id = None
+        else:
+            winner_id = int(request.form.get('winner_id', 0))
+            if winner_id not in (current_user.id, opponent_id):
+                flash('Invalid winner.')
+                conn.close()
+                return redirect(url_for('submit_result'))
+
+        # Parse set scores (skip for winner-only and no-winner outcomes)
+        sets = [(None, None), (None, None), (None, None)]
+        if outcome_type not in no_winner_outcomes and outcome_type not in winner_only_outcomes:
+            for s in range(1, 4):
+                p1_score = request.form.get(f'set{s}_p1', '')
+                p2_score = request.form.get(f'set{s}_p2', '')
+                if p1_score and p2_score:
+                    try:
+                        p1_val = int(p1_score)
+                        p2_val = int(p2_score)
+                    except ValueError:
+                        flash(f'Set {s} scores must be numbers.')
+                        conn.close()
+                        return redirect(url_for('submit_result'))
+                    if outcome_type == 'completed' and not validate_set_score(p1_val, p2_val):
+                        flash(f'Set {s} score {p1_val}-{p2_val} is not a valid tennis score.')
+                        conn.close()
+                        return redirect(url_for('submit_result'))
+                    sets[s - 1] = (p1_val, p2_val)
+
+            if outcome_type == 'completed':
+                if sets[0] == (None, None) or sets[1] == (None, None):
+                    flash('At least 2 sets are required.')
+                    conn.close()
+                    return redirect(url_for('submit_result'))
 
         # Check for duplicate submission
         cur.execute(f'''
@@ -1091,10 +1371,10 @@ def submit_result():
         cur.execute(f'''
             INSERT INTO matches (group_id, player1_id, player2_id, winner_id,
                 set1_p1, set1_p2, set2_p1, set2_p2, set3_p1, set3_p2,
-                submitted_by, status)
-            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, 'pending')
+                submitted_by, status, outcome_type)
+            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, 'pending', {ph})
         ''', (group['id'], p1_id, p2_id, winner_id,
-              s1_p1, s1_p2, s2_p1, s2_p2, s3_p1, s3_p2, current_user.id))
+              s1_p1, s1_p2, s2_p1, s2_p2, s3_p1, s3_p2, current_user.id, outcome_type))
         conn.commit()
         conn.close()
         flash('Match result submitted! Waiting for opponent to confirm.')
@@ -1248,9 +1528,13 @@ def profile():
     total_losses = len(match_history) - total_wins
 
     conn.close()
+    all_ladders = get_all_ladders()
+    ladder_name = get_ladder_name(ladder_id)
     return render_template('profile.html', ladder_player=ladder_player,
                            match_history=match_history, ranking_history=ranking_history,
-                           total_wins=total_wins, total_losses=total_losses)
+                           total_wins=total_wins, total_losses=total_losses,
+                           all_ladders=all_ladders, ladder_name=ladder_name,
+                           current_ladder_id=ladder_id)
 
 
 @app.route('/ladder/join', methods=['POST'])
@@ -1261,7 +1545,8 @@ def ladder_join():
         flash('Please select an NTRP rating.')
         return redirect(url_for('profile'))
 
-    ladder_id = get_ladder_id()
+    # Use form-specified ladder_id, or fall back to current active ladder
+    ladder_id = request.form.get('ladder_id', type=int) or get_ladder_id()
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
@@ -1316,7 +1601,9 @@ def ladder_join():
 
     conn.commit()
     conn.close()
-    flash(f'Welcome to the ladder! You have been placed at rank #{new_ranking}.')
+    session['ladder_id'] = ladder_id
+    ladder_name = get_ladder_name(ladder_id)
+    flash(f'Welcome to the {ladder_name} ladder! You have been placed at rank #{new_ranking}.')
     return redirect(url_for('profile'))
 
 
@@ -1772,9 +2059,23 @@ def admin():
     cur.execute(f"SELECT COUNT(*) as cnt FROM matches WHERE status = 'disputed'")
     disputed_count = dict(cur.fetchone())['cnt']
 
+    # Find which emails have successfully used a magic login link
+    cur.execute("SELECT DISTINCT email FROM magic_tokens WHERE used = TRUE")
+    magic_logged_in_emails = {row['email'] for row in cur.fetchall()}
+
+    # Mark users/players who have logged in (via Google OR magic link)
+    for u in all_users:
+        u['has_logged_in'] = bool(u.get('google_id')) or (u.get('email') in magic_logged_in_emails)
+    for lp in ladder_players:
+        lp['has_logged_in'] = bool(lp.get('google_id')) or (lp.get('email') in magic_logged_in_emails)
+
     conn.close()
+    all_ladders = get_all_ladders()
+    ladder_name = get_ladder_name(ladder_id)
     return render_template('admin.html', all_users=all_users, ladder_players=ladder_players,
-                           groups=groups, month=month, year=year, disputed_count=disputed_count)
+                           groups=groups, month=month, year=year, disputed_count=disputed_count,
+                           all_ladders=all_ladders, ladder_name=ladder_name,
+                           current_ladder_id=ladder_id)
 
 
 @app.route('/admin/generate-login-link', methods=['POST'])
@@ -1801,7 +2102,7 @@ def admin_generate_login_link():
         return redirect(url_for('admin'))
 
     token = str(uuid.uuid4())
-    expires_at = datetime.utcnow() + timedelta(hours=24)
+    expires_at = datetime(2099, 12, 31)  # Effectively never expires; links are single-use
 
     cur.execute(f'''
         INSERT INTO magic_tokens (email, token, expires_at)
@@ -1850,6 +2151,26 @@ def admin_add_to_ladder():
         VALUES ({ph}, {ph}, {ph})
     ''', (user_id, ladder_id, ranking))
     conn.commit()
+
+    # Send welcome email
+    cur.execute(f'SELECT email, username FROM users WHERE id = {ph}', (user_id,))
+    user_row = cur.fetchone()
+    cur.execute(f'SELECT name FROM ladders WHERE id = {ph}', (ladder_id,))
+    ladder_row = cur.fetchone()
+    if user_row and ladder_row:
+        user_row, ladder_row = dict(user_row), dict(ladder_row)
+        if user_row.get('email'):
+            ladder_name = ladder_row['name']
+            send_email(
+                user_row['email'],
+                f"Welcome to the {ladder_name} Tennis Ladder!",
+                email_wrap(f'''<p>Hi {user_row['username']},</p>
+<p>You've been added to the <strong>{ladder_name} Singles Tennis Ladder</strong> at rank #{ranking}.</p>
+<p>Each month you'll be placed in a group of 2-3 players. Play your matches, submit scores, and climb the ladder!</p>
+<p><a href="https://rallyrung.com/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>
+<p><a href="https://rallyrung.com/rules" style="color: #e74c3c;">Read the Rules</a></p>''',
+                    f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+
     conn.close()
     flash('Player added to ladder.')
     return redirect(url_for('admin'))
@@ -2026,14 +2347,26 @@ def admin_monthly_reset():
                 else:
                     movements[pid] = 'stay'
 
-            # Handle three-way 1-1 ties: tiebreak by games won
+            # Handle three-way 1-1 ties with CPSTL tiebreaker rules
             tied = [pid for pid in player_ids if movements.get(pid) == 'stay'
                     and standings.get(pid, {}).get('wins', 0) == 1]
             if len(tied) == 3:
-                # All three are 1-1 — tiebreak by total games won
-                tied.sort(key=lambda pid: standings[pid]['games_won'], reverse=True)
-                movements[tied[0]] = 'up'    # most games won moves up
-                movements[tied[2]] = 'down'  # fewest games won moves down
+                # All three are 1-1 — apply tiebreaker cascade:
+                # 1) Head-to-head (only useful for 2-way sub-ties)
+                # 2) Sets won minus sets lost
+                # 3) Games won minus games lost (was the old tiebreaker)
+                # 4) Highest current ranking (lower number = better)
+                def tiebreak_key(pid):
+                    s = standings[pid]
+                    set_diff = s['sets_won'] - s['sets_lost']
+                    game_diff = s['games_won'] - s['games_lost']
+                    # Lower ranking number = better, so negate for sorting
+                    rank_tiebreak = -rankings.get(pid, 999)
+                    return (set_diff, game_diff, rank_tiebreak)
+
+                tied.sort(key=tiebreak_key, reverse=True)
+                movements[tied[0]] = 'up'    # best tiebreak moves up
+                movements[tied[2]] = 'down'  # worst tiebreak moves down
                 # middle stays
 
         elif len(player_ids) == 2:
@@ -2124,6 +2457,137 @@ def admin_monthly_reset():
                 rankings[bottom_player] = below_rank
                 rankings[below_uid] = cur_bottom_rank
 
+    # Top 10 / Bottom 10 reseeding
+    # Reload current rankings from DB after swaps
+    cur.execute(f'''
+        SELECT user_id, ranking FROM ladder_players
+        WHERE ladder_id = {ph} AND is_active = {ph}
+        ORDER BY ranking ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1))
+    active_players = [dict(r) for r in cur.fetchall()]
+    total_active = len(active_players)
+
+    # Reseeding pattern: position -> new position (1-indexed within the 10)
+    # 1→1, 2→4, 3→7, 4→2, 5→5, 6→8, 7→3, 8→6, 9→10, 10→9
+    RESEED_MAP = {1: 1, 2: 4, 3: 7, 4: 2, 5: 5, 6: 8, 7: 3, 8: 6, 9: 10, 10: 9}
+
+    def apply_reseed(player_list, offset):
+        """Reseed a group of up to 10 players starting at offset rank.
+        player_list: list of (user_id, current_ranking) sorted by ranking.
+        offset: the base ranking (e.g., 1 for top-10, total-9 for bottom-10)."""
+        count = len(player_list)
+        if count < 2:
+            return
+
+        # Use negative temp rankings to avoid unique constraint conflicts
+        temp_base = -10000 - offset
+        for i, (uid, _) in enumerate(player_list):
+            new_pos = RESEED_MAP.get(i + 1, i + 1)
+            new_rank = offset + new_pos - 1
+            cur.execute(f'UPDATE ladder_players SET ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
+                        (temp_base - i, uid, ladder_id))
+            rankings[uid] = new_rank
+
+        # Now set final rankings
+        for uid, new_rank in [(uid, rankings[uid]) for uid, _ in player_list]:
+            cur.execute(f'UPDATE ladder_players SET ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
+                        (new_rank, uid, ladder_id))
+
+    if total_active >= 10:
+        # Apply top-10 reseeding
+        top_10 = [(p['user_id'], p['ranking']) for p in active_players[:10]]
+        apply_reseed(top_10, 1)
+
+    if total_active >= 20:
+        # Apply bottom-10 reseeding
+        bottom_10 = [(p['user_id'], p['ranking']) for p in active_players[-10:]]
+        bottom_offset = active_players[-10]['ranking']
+        apply_reseed(bottom_10, bottom_offset)
+
+    # Auto-drop: check inactivity for all active players
+    cur.execute(f'''
+        SELECT lp.user_id, lp.ranking, lp.inactive_months FROM ladder_players lp
+        WHERE lp.ladder_id = {ph} AND lp.is_active = {ph}
+        ORDER BY lp.ranking ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1))
+    all_active = [dict(r) for r in cur.fetchall()]
+
+    # Get all players who participated in matches this month
+    cur.execute(f'''
+        SELECT DISTINCT m.player1_id as pid FROM matches m
+        JOIN monthly_groups mg ON m.group_id = mg.id
+        WHERE mg.ladder_id = {ph} AND mg.month = {ph} AND mg.year = {ph}
+          AND m.status = 'confirmed'
+        UNION
+        SELECT DISTINCT m.player2_id as pid FROM matches m
+        JOIN monthly_groups mg ON m.group_id = mg.id
+        WHERE mg.ladder_id = {ph} AND mg.month = {ph} AND mg.year = {ph}
+          AND m.status = 'confirmed'
+    ''', (ladder_id, month, year, ladder_id, month, year))
+    active_this_month = {dict(r)['pid'] for r in cur.fetchall()}
+
+    # Get ladder name for emails
+    cur.execute(f'SELECT name FROM ladders WHERE id = {ph}', (ladder_id,))
+    ladder_name = dict(cur.fetchone())['name']
+
+    dropped_count = 0
+    for player in all_active:
+        uid = player['user_id']
+        if uid in active_this_month:
+            # Reset inactivity counter
+            cur.execute(f'UPDATE ladder_players SET inactive_months = 0 WHERE user_id = {ph} AND ladder_id = {ph}',
+                        (uid, ladder_id))
+        else:
+            new_inactive = player['inactive_months'] + 1
+            if new_inactive >= 2:
+                # Deactivate player and compact rankings
+                drop_rank = rankings.get(uid, player['ranking'])
+                cur.execute(f'''
+                    UPDATE ladder_players SET is_active = {ph}, inactive_months = {ph}
+                    WHERE user_id = {ph} AND ladder_id = {ph}
+                ''', (False if USE_POSTGRES else 0, new_inactive, uid, ladder_id))
+                # Shift everyone below up by 1
+                cur.execute(f'''
+                    UPDATE ladder_players SET ranking = ranking - 1
+                    WHERE ladder_id = {ph} AND ranking > {ph} AND is_active = {ph}
+                ''', (ladder_id, drop_rank, True if USE_POSTGRES else 1))
+                # Update in-memory rankings
+                for k, v in rankings.items():
+                    if v > drop_rank:
+                        rankings[k] = v - 1
+                dropped_count += 1
+                # Send dropped email
+                cur.execute(f'SELECT email, username FROM users WHERE id = {ph}', (uid,))
+                dropped_user = cur.fetchone()
+                if dropped_user:
+                    dropped_user = dict(dropped_user)
+                    if dropped_user.get('email'):
+                        send_email(
+                            dropped_user['email'],
+                            f"You've been removed from the {ladder_name} Tennis Ladder",
+                            email_wrap(f'''<p>Hi {dropped_user['username']},</p>
+<p>You have been removed from the <strong>{ladder_name} Singles Tennis Ladder</strong> for not playing any matches for 2 consecutive months.</p>
+<p>You can rejoin at any time — just contact the ladder admin.</p>''',
+                                f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+            else:
+                cur.execute(f'UPDATE ladder_players SET inactive_months = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
+                            (new_inactive, uid, ladder_id))
+                # Send drop warning email (1 month inactive)
+                if new_inactive == 1:
+                    cur.execute(f'SELECT email, username FROM users WHERE id = {ph}', (uid,))
+                    warn_user = cur.fetchone()
+                    if warn_user:
+                        warn_user = dict(warn_user)
+                        if warn_user.get('email'):
+                            send_email(
+                                warn_user['email'],
+                                f"Inactivity warning — {ladder_name} Tennis Ladder",
+                                email_wrap(f'''<p>Hi {warn_user['username']},</p>
+<p>You did not play any matches this month on the <strong>{ladder_name} Singles Tennis Ladder</strong>.</p>
+<p>If you do not play next month, you will be automatically removed from the ladder.</p>
+<p><a href="https://rallyrung.com/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>''',
+                                    f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+
     # Update archived new_ranking
     for uid in movements:
         new_rank = rankings.get(uid, 0)
@@ -2134,7 +2598,8 @@ def admin_monthly_reset():
 
     conn.commit()
     conn.close()
-    flash(f'Monthly reset complete for {month}/{year}. Rankings updated.')
+    drop_msg = f' {dropped_count} player(s) auto-dropped for inactivity.' if dropped_count else ''
+    flash(f'Monthly reset complete for {month}/{year}. Rankings updated.{drop_msg}')
     return redirect(url_for('admin'))
 
 

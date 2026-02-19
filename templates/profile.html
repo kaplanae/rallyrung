@@ -70,8 +70,16 @@
         <h3>Ladder Status</h3>
     </div>
     {% if not ladder_player %}
-        <p style="margin-bottom: 12px;">You are not currently on the ladder. Join to start competing!</p>
+        <p style="margin-bottom: 12px;">You are not currently on the {{ ladder_name }} ladder. Join to start competing!</p>
         <form method="POST" action="{{ url_for('ladder_join') }}">
+            <div class="form-group">
+                <label>Ladder</label>
+                <select name="ladder_id" required>
+                    {% for l in all_ladders %}
+                        <option value="{{ l.id }}" {{ 'selected' if l.id == current_ladder_id }}>{{ l.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="form-group">
                 <label>NTRP Rating</label>
                 <select name="ntrp_rating" required>
@@ -84,7 +92,7 @@
             <button type="submit" class="btn btn-primary btn-sm">Join Ladder</button>
         </form>
     {% elif ladder_player.is_active %}
-        <p style="margin-bottom: 12px;">You are <strong>active</strong> on the ladder at rank <strong>#{{ ladder_player.ranking }}</strong>.</p>
+        <p style="margin-bottom: 12px;">You are <strong>active</strong> on the <strong>{{ ladder_name }}</strong> ladder at rank <strong>#{{ ladder_player.ranking }}</strong>.</p>
         <div style="display: flex; gap: 8px;">
             <form method="POST" action="{{ url_for('ladder_pause') }}">
                 <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Pause</button>
@@ -94,7 +102,7 @@
             </form>
         </div>
     {% else %}
-        <p style="margin-bottom: 12px;">You are <strong>paused</strong> on the ladder at rank <strong>#{{ ladder_player.ranking }}</strong>. You won't be placed in groups until you resume.</p>
+        <p style="margin-bottom: 12px;">You are <strong>paused</strong> on the <strong>{{ ladder_name }}</strong> ladder at rank <strong>#{{ ladder_player.ranking }}</strong>. You won't be placed in groups until you resume.</p>
         <div style="display: flex; gap: 8px;">
             <form method="POST" action="{{ url_for('ladder_unpause') }}">
                 <button type="submit" class="btn btn-primary btn-sm">Resume</button>

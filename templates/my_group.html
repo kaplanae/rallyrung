@@ -154,19 +154,32 @@
         <div class="match-header">
             <span class="match-players">{{ m.p1_name }} vs {{ m.p2_name }}</span>
             <span class="match-status status-{{ m.status }}">{{ m.status }}</span>
+            {% if m.outcome_type and m.outcome_type != 'completed' %}
+                <span class="badge" style="background: rgba(155, 89, 182, 0.15); color: #9b59b6; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; margin-left: 6px;">
+                    {{ m.outcome_type | replace('_', ' ') }}
+                </span>
+            {% endif %}
         </div>
         <div class="match-scores">
-            {% if m.set1_p1 is not none %}
-                <span class="set-score">{{ m.set1_p1 }}-{{ m.set1_p2 }}</span>
-            {% endif %}
-            {% if m.set2_p1 is not none %}
-                <span class="set-score">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
-            {% endif %}
-            {% if m.set3_p1 is not none %}
-                <span class="set-score">{{ m.set3_p1 }}-{{ m.set3_p2 }}</span>
-            {% endif %}
-            {% if m.winner_name %}
-                <span style="margin-left: 8px; color: var(--accent); font-weight: 600;">Winner: {{ m.winner_name }}</span>
+            {% if m.outcome_type in ('schedule_problem', 'weather_problem') %}
+                <span style="color: var(--text-muted); font-style: italic;">No winner</span>
+            {% elif m.outcome_type in ('forfeit', 'injury_not_played') %}
+                {% if m.winner_name %}
+                    <span style="color: var(--accent); font-weight: 600;">Winner: {{ m.winner_name }}</span>
+                {% endif %}
+            {% else %}
+                {% if m.set1_p1 is not none %}
+                    <span class="set-score">{{ m.set1_p1 }}-{{ m.set1_p2 }}</span>
+                {% endif %}
+                {% if m.set2_p1 is not none %}
+                    <span class="set-score">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
+                {% endif %}
+                {% if m.set3_p1 is not none %}
+                    <span class="set-score">{{ m.set3_p1 }}-{{ m.set3_p2 }}</span>
+                {% endif %}
+                {% if m.winner_name %}
+                    <span style="margin-left: 8px; color: var(--accent); font-weight: 600;">Winner: {{ m.winner_name }}</span>
+                {% endif %}
             {% endif %}
         </div>
 

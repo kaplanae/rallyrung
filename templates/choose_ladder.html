@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Choose Ladder — RallyRung{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Choose a Ladder</h1>
+<p style="color: var(--text-muted); margin-bottom: 24px;">Select a ladder to view or join.</p>
+
+<div style="display: flex; gap: 16px; flex-wrap: wrap;">
+    {% for ladder in ladders %}
+    <div class="card" style="flex: 1; min-width: 200px; max-width: 400px;">
+        <h3 style="margin-bottom: 8px;">{{ ladder.name }}</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px;">{{ ladder.sport | capitalize }}</p>
+        {% if ladder.id in user_ladder_ids %}
+            <a href="{{ url_for('switch_ladder', ladder_id=ladder.id) }}" class="btn btn-primary btn-sm">View Ladder</a>
+            <span class="badge badge-active" style="margin-left: 8px;">Joined</span>
+        {% else %}
+            <a href="{{ url_for('switch_ladder', ladder_id=ladder.id) }}" class="btn btn-secondary btn-sm">View Ladder</a>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

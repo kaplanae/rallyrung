@@ -17,8 +17,20 @@
         </div>
 
         <div class="form-group">
+            <label>Match Outcome</label>
+            <select name="outcome_type" required id="outcome-type">
+                <option value="completed">Completed (normal match)</option>
+                <option value="forfeit">Forfeit (opponent didn't show)</option>
+                <option value="injury_not_played">Injury — match not played</option>
+                <option value="injury_not_finished">Injury — match not finished</option>
+                <option value="schedule_problem">Scheduling problem (no winner)</option>
+                <option value="weather_problem">Weather problem (no winner)</option>
+            </select>
+        </div>
+
+        <div class="form-group" id="winner-group">
             <label>Winner</label>
-            <select name="winner_id" required id="winner-select">
+            <select name="winner_id" id="winner-select">
                 <option value="">Select winner...</option>
                 <option value="{{ current_user.id }}">Me ({{ current_user.username }})</option>
                 {% for opp in opponents %}
@@ -27,31 +39,35 @@
             </select>
         </div>
 
-        <div style="margin: 20px 0;">
+        <div style="margin: 20px 0;" id="scores-section">
             <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
                 Set Scores <span style="font-weight: 400; text-transform: none;">(your score first)</span>
             </label>
 
-            <div class="set-score-row">
+            <div id="set-status" style="margin-bottom: 12px; font-size: 0.9rem; color: var(--accent); font-weight: 600; display: none;"></div>
+
+            <div class="set-score-row" id="set1-row">
                 <label>Set 1</label>
-                <input type="number" name="set1_p1" min="0" max="7" required placeholder="You">
+                <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set1_p1" placeholder="You" autocomplete="off">
                 <span class="dash">—</span>
-                <input type="number" name="set1_p2" min="0" max="7" required placeholder="Opp">
+                <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set1_p2" placeholder="Opp" autocomplete="off">
+                <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
             </div>
 
-            <div class="set-score-row">
+            <div class="set-score-row" id="set2-row">
                 <label>Set 2</label>
-                <input type="number" name="set2_p1" min="0" max="7" required placeholder="You">
+                <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set2_p1" placeholder="You" autocomplete="off">
                 <span class="dash">—</span>
-                <input type="number" name="set2_p2" min="0" max="7" required placeholder="Opp">
+                <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set2_p2" placeholder="Opp" autocomplete="off">
+                <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
             </div>
 
-            <div class="set-score-row">
+            <div class="set-score-row" id="set3-row" style="display: none;">
                 <label>Set 3</label>
-                <input type="number" name="set3_p1" min="0" max="7" placeholder="You">
+                <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set3_p1" placeholder="You" autocomplete="off">
                 <span class="dash">—</span>
-                <input type="number" name="set3_p2" min="0" max="7" placeholder="Opp">
-                <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">optional</span>
+                <input type="text" inputmode="numeric" pattern="[0-7]" maxlength="1" name="set3_p2" placeholder="Opp" autocomplete="off">
+                <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
             </div>
         </div>
 
@@ -65,32 +81,262 @@
 
 {% block scripts %}
 <script>
+const outcomeSelect = document.getElementById('outcome-type');
+const winnerGroup = document.getElementById('winner-group');
+const winnerSelect = document.getElementById('winner-select');
+const scoresSection = document.getElementById('scores-section');
+const set1Row = document.getElementById('set1-row');
+const set2Row = document.getElementById('set2-row');
+const set3Row = document.getElementById('set3-row');
+const setStatus = document.getElementById('set-status');
+
+const myId = '{{ current_user.id }}';
+const myName = '{{ current_user.username }}';
+const opponents = { {% for opp in opponents %}'{{ opp.id }}': '{{ opp.username }}'{% if not loop.last %}, {% endif %}{% endfor %} };
+
+const VALID_SCORES = [
+    [6,0],[6,1],[6,2],[6,3],[6,4],[7,5],[7,6],
+    [0,6],[1,6],[2,6],[3,6],[4,6],[5,7],[6,7]
+];
+
+function isValidSet(a, b) {
+    return VALID_SCORES.some(v => v[0] === a && v[1] === b);
+}
+
+function getSetScores(setNum) {
+    const p1 = document.querySelector(`[name="set${setNum}_p1"]`).value.trim();
+    const p2 = document.querySelector(`[name="set${setNum}_p2"]`).value.trim();
+    if (p1 === '' || p2 === '') return null;
+    return [parseInt(p1), parseInt(p2)];
+}
+
+// "You" won if your score > opponent score
+function youWonSet(scores) {
+    return scores[0] > scores[1];
+}
+
+function getWinnerName() {
+    const wid = winnerSelect.value;
+    if (!wid) return null;
+    if (wid === myId) return myName;
+    return opponents[wid] || null;
+}
+
+function getWinnerId() {
+    return winnerSelect.value || null;
+}
+
+function updateScores() {
+    const outcome = outcomeSelect.value;
+    if (outcome !== 'completed') return;
+
+    const winnerId = getWinnerId();
+    const winnerIsMe = winnerId === myId;
+
+    const s1 = getSetScores(1);
+    const s2 = getSetScores(2);
+
+    // Validate set 1
+    const v1 = set1Row.querySelector('.set-validation');
+    if (s1) {
+        if (isValidSet(s1[0], s1[1])) {
+            v1.textContent = '✓';
+            v1.style.color = '#2ecc71';
+        } else {
+            v1.textContent = 'Invalid';
+            v1.style.color = '#e74c3c';
+        }
+    } else {
+        v1.textContent = '';
+    }
+
+    // Validate set 2
+    const v2 = set2Row.querySelector('.set-validation');
+    if (s2) {
+        if (isValidSet(s2[0], s2[1])) {
+            v2.textContent = '✓';
+            v2.style.color = '#2ecc71';
+        } else {
+            v2.textContent = 'Invalid';
+            v2.style.color = '#e74c3c';
+        }
+    } else {
+        v2.textContent = '';
+    }
+
+    // Show set status and decide if set 3 is needed
+    if (s1 && s2 && isValidSet(s1[0], s1[1]) && isValidSet(s2[0], s2[1])) {
+        const mySetWins = (youWonSet(s1) ? 1 : 0) + (youWonSet(s2) ? 1 : 0);
+        const oppSetWins = 2 - mySetWins;
+        const winnerName = getWinnerName();
+
+        if (mySetWins === 1 && oppSetWins === 1) {
+            // Split — show set 3
+            set3Row.style.display = '';
+            setStatus.textContent = 'Sets tied 1-1 — enter deciding set';
+            setStatus.style.display = '';
+
+            // Validate set 3
+            const s3 = getSetScores(3);
+            const v3 = set3Row.querySelector('.set-validation');
+            if (s3) {
+                if (isValidSet(s3[0], s3[1])) {
+                    v3.textContent = '✓';
+                    v3.style.color = '#2ecc71';
+                } else {
+                    v3.textContent = 'Invalid';
+                    v3.style.color = '#e74c3c';
+                }
+
+                // Update status with final result
+                if (isValidSet(s3[0], s3[1])) {
+                    const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
+                    const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
+                    if (winnerName) {
+                        setStatus.textContent = `${winnerName} wins ${winnerIsMe ? finalMyWins : finalOppWins}-${winnerIsMe ? finalOppWins : finalMyWins}`;
+                    }
+                }
+            } else {
+                v3.textContent = '';
+            }
+        } else {
+            // Straight sets — hide set 3, clear its values
+            set3Row.style.display = 'none';
+            set3Row.querySelectorAll('input').forEach(inp => inp.value = '');
+            set3Row.querySelector('.set-validation').textContent = '';
+
+            if (winnerName) {
+                setStatus.textContent = `${winnerName} wins ${Math.max(mySetWins, oppSetWins)}-${Math.min(mySetWins, oppSetWins)}`;
+                setStatus.style.display = '';
+            }
+        }
+    } else {
+        set3Row.style.display = 'none';
+        set3Row.querySelectorAll('input').forEach(inp => inp.value = '');
+        set3Row.querySelector('.set-validation').textContent = '';
+        setStatus.style.display = 'none';
+    }
+}
+
+function updateFormState() {
+    const outcome = outcomeSelect.value;
+
+    // Reset all
+    winnerGroup.style.display = '';
+    winnerSelect.required = true;
+    scoresSection.style.display = '';
+    set3Row.style.display = 'none';
+    setStatus.style.display = 'none';
+
+    if (outcome === 'completed') {
+        // Full match: require winner + sets
+        updateScores();
+    } else if (outcome === 'forfeit' || outcome === 'injury_not_played') {
+        // Winner only, no scores
+        scoresSection.style.display = 'none';
+        scoresSection.querySelectorAll('input').forEach(inp => inp.value = '');
+    } else if (outcome === 'injury_not_finished') {
+        // Winner + optional partial scores (no special validation)
+        set3Row.style.display = '';
+    } else if (outcome === 'schedule_problem' || outcome === 'weather_problem') {
+        // No winner, no scores
+        winnerGroup.style.display = 'none';
+        winnerSelect.required = false;
+        winnerSelect.value = '';
+        scoresSection.style.display = 'none';
+        scoresSection.querySelectorAll('input').forEach(inp => inp.value = '');
+    }
+}
+
+outcomeSelect.addEventListener('change', updateFormState);
+winnerSelect.addEventListener('change', updateScores);
+
+// Listen on all score inputs
+document.querySelectorAll('.set-score-row input').forEach(inp => {
+    inp.addEventListener('input', function() {
+        // Only allow single digit 0-7
+        this.value = this.value.replace(/[^0-7]/g, '').slice(0, 1);
+        updateScores();
+    });
+});
+
+updateFormState();
+
 document.getElementById('result-form').addEventListener('submit', function(e) {
-    const sets = [];
-    for (let i = 1; i <= 3; i++) {
-        const p1 = document.querySelector(`[name="set${i}_p1"]`).value;
-        const p2 = document.querySelector(`[name="set${i}_p2"]`).value;
-        if (p1 !== '' && p2 !== '') {
-            sets.push([parseInt(p1), parseInt(p2)]);
+    const outcome = outcomeSelect.value;
+
+    if (outcome === 'completed') {
+        const winnerId = getWinnerId();
+        const winnerIsMe = winnerId === myId;
+
+        if (!winnerId) {
+            alert('Please select a winner.');
+            e.preventDefault();
+            return;
+        }
+
+        const s1 = getSetScores(1);
+        const s2 = getSetScores(2);
+
+        if (!s1 || !s2) {
+            alert('Please enter scores for at least 2 sets.');
+            e.preventDefault();
+            return;
+        }
+
+        if (!isValidSet(s1[0], s1[1])) {
+            alert(`Set 1 score ${s1[0]}-${s1[1]} is not valid.\n\nWin to 6 (up to 6-4) or 7 (7-5, 7-6).`);
+            e.preventDefault();
+            return;
+        }
+
+        if (!isValidSet(s2[0], s2[1])) {
+            alert(`Set 2 score ${s2[0]}-${s2[1]} is not valid.\n\nWin to 6 (up to 6-4) or 7 (7-5, 7-6).`);
+            e.preventDefault();
+            return;
+        }
+
+        const mySet1 = youWonSet(s1);
+        const mySet2 = youWonSet(s2);
+        let mySetWins = (mySet1 ? 1 : 0) + (mySet2 ? 1 : 0);
+        let oppSetWins = 2 - mySetWins;
+
+        if (mySetWins === 1 && oppSetWins === 1) {
+            // Need set 3
+            const s3 = getSetScores(3);
+            if (!s3) {
+                alert('Sets are split 1-1 — please enter a 3rd set.');
+                e.preventDefault();
+                return;
+            }
+            if (!isValidSet(s3[0], s3[1])) {
+                alert(`Set 3 score ${s3[0]}-${s3[1]} is not valid.\n\nWin to 6 (up to 6-4) or 7 (7-5, 7-6).`);
+                e.preventDefault();
+                return;
+            }
+            mySetWins += youWonSet(s3) ? 1 : 0;
+            oppSetWins += youWonSet(s3) ? 0 : 1;
+        }
+
+        // Check winner matches set results
+        const winnerSetsWon = winnerIsMe ? mySetWins : oppSetWins;
+        if (winnerSetsWon < 2) {
+            const winnerName = getWinnerName();
+            alert(`${winnerName} only won ${winnerSetsWon} set(s) — the winner must win 2 sets. Check your scores or change the winner.`);
+            e.preventDefault();
+            return;
         }
     }
 
-    if (sets.length < 2) {
-        alert('At least 2 sets are required.');
-        e.preventDefault();
-        return;
-    }
-
-    for (let i = 0; i < sets.length; i++) {
-        const [a, b] = sets[i];
-        const valid = [
-            [6,0],[6,1],[6,2],[6,3],[6,4],[7,5],[7,6],
-            [0,6],[1,6],[2,6],[3,6],[4,6],[5,7],[6,7]
-        ];
-        if (!valid.some(v => v[0] === a && v[1] === b)) {
-            alert(`Set ${i+1} score ${a}-${b} is not a valid tennis score.\n\nValid: 6-0 to 6-4, 7-5, 7-6 (and reversed)`);
-            e.preventDefault();
-            return;
+    if (outcome === 'injury_not_finished') {
+        for (let i = 1; i <= 3; i++) {
+            const p1 = document.querySelector(`[name="set${i}_p1"]`).value;
+            const p2 = document.querySelector(`[name="set${i}_p2"]`).value;
+            if ((p1 !== '' && p2 === '') || (p1 === '' && p2 !== '')) {
+                alert(`Set ${i}: Both scores must be filled or both empty.`);
+                e.preventDefault();
+                return;
+            }
         }
     }
 });
