@@ -742,7 +742,7 @@ def validate_set_score(p1, p2):
 
 
 def validate_tiebreak_score(p1, p2):
-    """Validate a match tiebreak score (3rd set). First to 10 or 7, win by 2."""
+    """Validate a match tiebreak score (3rd set). First to 10, win by 2."""
     if p1 is None or p2 is None:
         return True
     if not (isinstance(p1, int) and isinstance(p2, int)):
@@ -750,18 +750,11 @@ def validate_tiebreak_score(p1, p2):
     if p1 < 0 or p2 < 0:
         return False
     high, low = max(p1, p2), min(p1, p2)
-    diff = high - low
-    if diff < 2:
+    if high - low < 2:
         return False
-    # 10-point match tiebreak
     if high == 10 and low <= 8:
         return True
     if high > 10 and low == high - 2 and low >= 9:
-        return True
-    # 7-point match tiebreak
-    if high == 7 and low <= 5:
-        return True
-    if 7 < high < 10 and low == high - 2 and low >= 6:
         return True
     return False
 

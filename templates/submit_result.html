@@ -154,6 +154,15 @@ function isValidTiebreak(a, b) {
     return false;
 }
 
+function isValid10PointTiebreak(a, b) {
+    if (a < 0 || b < 0) return false;
+    const high = Math.max(a, b), low = Math.min(a, b);
+    if (high - low < 2) return false;
+    if (high === 10 && low <= 8) return true;
+    if (high > 10 && low === high - 2 && low >= 9) return true;
+    return false;
+}
+
 function isSetTiebreak(a, b) {
     // 7-6 or 6-7
     return (a === 7 && b === 6) || (a === 6 && b === 7);
@@ -292,7 +301,7 @@ function updateScores() {
                             const parts = tbVal.split('-');
                             if (parts.length === 2) {
                                 const tbA = parseInt(parts[0]), tbB = parseInt(parts[1]);
-                                if (isValidTiebreak(tbA, tbB)) {
+                                if (isValid10PointTiebreak(tbA, tbB)) {
                                     const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
                                     const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
                                     setStatus.textContent = `${winnerName} wins ${winnerIsMe ? finalMyWins : finalOppWins}-${winnerIsMe ? finalOppWins : finalMyWins}`;
@@ -472,8 +481,8 @@ document.getElementById('result-form').addEventListener('submit', function(e) {
                 const tb3Parts = tb3Val.split('-');
                 if (tb3Parts.length === 2) {
                     const tb3A = parseInt(tb3Parts[0]), tb3B = parseInt(tb3Parts[1]);
-                    if (!isValidTiebreak(tb3A, tb3B)) {
-                        alert(`Tiebreak score ${tb3A}-${tb3B} is not valid.\n\nFirst to 10 (or 7), win by 2.`);
+                    if (!isValid10PointTiebreak(tb3A, tb3B)) {
+                        alert(`Tiebreak score ${tb3A}-${tb3B} is not valid.\n\nFirst to 10, win by 2.`);
                         e.preventDefault();
                         return;
                     }
