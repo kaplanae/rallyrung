@@ -198,7 +198,7 @@ def init_db():
             set1_p1 INTEGER, set1_p2 INTEGER,
             set2_p1 INTEGER, set2_p2 INTEGER,
             set3_p1 INTEGER, set3_p2 INTEGER,
-            set1_tb TEXT, set2_tb TEXT,
+            set1_tb TEXT, set2_tb TEXT, set3_tb TEXT,
             submitted_by INTEGER REFERENCES users(id),
             confirmed_by INTEGER REFERENCES users(id),
             status TEXT DEFAULT 'pending',
@@ -300,7 +300,7 @@ def init_db():
             set1_p1 INTEGER, set1_p2 INTEGER,
             set2_p1 INTEGER, set2_p2 INTEGER,
             set3_p1 INTEGER, set3_p2 INTEGER,
-            set1_tb TEXT, set2_tb TEXT,
+            set1_tb TEXT, set2_tb TEXT, set3_tb TEXT,
             submitted_by INTEGER REFERENCES users(id),
             confirmed_by INTEGER REFERENCES users(id),
             status TEXT DEFAULT 'pending',
@@ -369,6 +369,11 @@ def init_db():
         conn.rollback()
     try:
         cur.execute("ALTER TABLE matches ADD COLUMN set2_tb TEXT")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        cur.execute("ALTER TABLE matches ADD COLUMN set3_tb TEXT")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -1164,8 +1169,8 @@ def ladder():
                     break
                 a, b = (sp1, sp2) if is_p1 else (sp2, sp1)
                 score = f"{a}-{b}"
-                # Add tiebreak detail for 7-6 sets
-                tb = match.get(f'set{s}_tb') if s <= 2 else None
+                # Add tiebreak detail
+                tb = match.get(f'set{s}_tb')
                 if tb:
                     parts = tb.split('-')
                     if len(parts) == 2:
@@ -1385,10 +1390,13 @@ def submit_result():
                                 flash(f'Set 2 score {p1_val}-{p2_val} is not a valid tennis score.')
                                 conn.close()
                                 return redirect(url_for('submit_result'))
-                        if s == 3 and not validate_tiebreak_score(p1_val, p2_val):
-                            flash(f'Tiebreak score {p1_val}-{p2_val} is not valid. Must be first to 10 or 7, win by 2.')
-                            conn.close()
-                            return redirect(url_for('submit_result'))
+                        if s == 3:
+                            # Set 3 must be 1-0 or 0-1 (match tiebreak)
+                            is_tb_set3 = (p1_val == 1 and p2_val == 0) or (p1_val == 0 and p2_val == 1)
+                            if not is_tb_set3:
+                                flash(f'Set 3 must be reported as 1-0 or 0-1 (match tiebreak).')
+                                conn.close()
+                                return redirect(url_for('submit_result'))
                     sets[s - 1] = (p1_val, p2_val)
 
             if outcome_type == 'completed':
@@ -1408,9 +1416,10 @@ def submit_result():
             conn.close()
             return redirect(url_for('my_group'))
 
-        # Parse set tiebreak scores (for 7-6 sets)
+        # Parse set tiebreak scores
         set1_tb = request.form.get('set1_tb', '').strip() or None
         set2_tb = request.form.get('set2_tb', '').strip() or None
+        set3_tb = request.form.get('set3_tb', '').strip() or None
 
         # Order players so player1 is always the lower id for consistency
         if current_user.id < opponent_id:
@@ -1432,16 +1441,20 @@ def submit_result():
                 parts = set2_tb.split('-')
                 if len(parts) == 2:
                     set2_tb = f"{parts[1]}-{parts[0]}"
+            if set3_tb:
+                parts = set3_tb.split('-')
+                if len(parts) == 2:
+                    set3_tb = f"{parts[1]}-{parts[0]}"
 
         cur.execute(f'''
             INSERT INTO matches (group_id, player1_id, player2_id, winner_id,
                 set1_p1, set1_p2, set2_p1, set2_p2, set3_p1, set3_p2,
-                set1_tb, set2_tb,
+                set1_tb, set2_tb, set3_tb,
                 submitted_by, status, outcome_type)
-            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, 'pending', {ph})
+            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, 'pending', {ph})
         ''', (group['id'], p1_id, p2_id, winner_id,
               s1_p1, s1_p2, s2_p1, s2_p2, s3_p1, s3_p2,
-              set1_tb, set2_tb, current_user.id, outcome_type))
+              set1_tb, set2_tb, set3_tb, current_user.id, outcome_type))
         conn.commit()
         conn.close()
         flash('Match result submitted! Waiting for opponent to confirm.')
