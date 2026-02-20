@@ -72,14 +72,7 @@
     {% if not ladder_player %}
         <p style="margin-bottom: 12px;">You are not currently on the {{ ladder_name }} ladder. Join to start competing!</p>
         <form method="POST" action="{{ url_for('ladder_join') }}">
-            <div class="form-group">
-                <label>Ladder</label>
-                <select name="ladder_id" required>
-                    {% for l in all_ladders %}
-                        <option value="{{ l.id }}" {{ 'selected' if l.id == current_ladder_id }}>{{ l.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+            <input type="hidden" name="ladder_id" value="{{ current_ladder_id }}">
             <div class="form-group">
                 <label>NTRP Rating</label>
                 <select name="ntrp_rating" required>

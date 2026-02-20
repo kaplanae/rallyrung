@@ -4,19 +4,6 @@
 {% block content %}
 <h1 class="page-title">Admin Panel — {{ ladder_name }}</h1>
 
-<div class="admin-section">
-    <h2>Active Ladder</h2>
-    <div style="display: flex; gap: 12px; align-items: center;">
-        {% for l in all_ladders %}
-            {% if l.id == current_ladder_id %}
-                <span class="btn btn-primary btn-sm">{{ l.name }}</span>
-            {% else %}
-                <a href="{{ url_for('switch_ladder', ladder_id=l.id) }}" class="btn btn-secondary btn-sm">{{ l.name }}</a>
-            {% endif %}
-        {% endfor %}
-    </div>
-</div>
-
 {% if disputed_count > 0 %}
 <div class="flash error">{{ disputed_count }} disputed match{{ 'es' if disputed_count > 1 }} need review.</div>
 {% endif %}

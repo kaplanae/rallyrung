@@ -373,18 +373,13 @@ def init_db():
     except Exception:
         conn.rollback()
 
-    # Seed default ladders (idempotent)
+    # Seed default ladder (idempotent)
     cur.execute('SELECT id FROM ladders LIMIT 1')
     if not cur.fetchone():
         cur.execute("INSERT INTO ladders (name, sport) VALUES ('Cedar Park', 'tennis')")
     else:
         # Rename legacy ladder name if needed
         cur.execute(f"UPDATE ladders SET name = 'Cedar Park' WHERE name = 'RallyRung Tennis Ladder'")
-
-    # Add Austin ladder if it doesn't exist
-    cur.execute(f"SELECT id FROM ladders WHERE name = 'Austin'")
-    if not cur.fetchone():
-        cur.execute("INSERT INTO ladders (name, sport) VALUES ('Austin', 'tennis')")
 
     conn.commit()
 
