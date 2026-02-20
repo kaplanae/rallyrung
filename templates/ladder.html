@@ -37,7 +37,7 @@
                         {% if r.opponent.profile_picture %}
                             <img src="{{ r.opponent.profile_picture }}" alt="">
                         {% endif %}
-                        {{ r.opponent.username }} <span style="font-size: 0.8rem; color: var(--text-muted);">{{ r.opponent.ntrp_rating or '' }}{{ r.opponent.gender or '' }}</span>
+                        <span style="font-size: 0.8rem; color: var(--text-muted);">{{ r.opponent.ranking }}</span> {{ r.opponent.username }} <span style="font-size: 0.8rem; color: var(--text-muted);">{{ r.opponent.ntrp_rating or '' }}{{ r.opponent.gender or '' }}</span>
                     </div>
                     {% else %}
                         <span style="color: var(--text-muted);">—</span>
