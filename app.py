@@ -1374,10 +1374,17 @@ def submit_result():
                         conn.close()
                         return redirect(url_for('submit_result'))
                     if outcome_type == 'completed':
-                        if s <= 2 and not validate_set_score(p1_val, p2_val):
-                            flash(f'Set {s} score {p1_val}-{p2_val} is not a valid tennis score.')
+                        if s == 1 and not validate_set_score(p1_val, p2_val):
+                            flash(f'Set 1 score {p1_val}-{p2_val} is not a valid tennis score.')
                             conn.close()
                             return redirect(url_for('submit_result'))
+                        if s == 2:
+                            # Allow 1-0/0-1 for match tiebreak in lieu of full set
+                            is_tb_set = (p1_val == 1 and p2_val == 0) or (p1_val == 0 and p2_val == 1)
+                            if not is_tb_set and not validate_set_score(p1_val, p2_val):
+                                flash(f'Set 2 score {p1_val}-{p2_val} is not a valid tennis score.')
+                                conn.close()
+                                return redirect(url_for('submit_result'))
                         if s == 3 and not validate_tiebreak_score(p1_val, p2_val):
                             flash(f'Tiebreak score {p1_val}-{p2_val} is not valid. Must be first to 10 or 7, win by 2.')
                             conn.close()
