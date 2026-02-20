@@ -93,24 +93,14 @@
         </form>
     {% elif ladder_player.is_active %}
         <p style="margin-bottom: 12px;">You are <strong>active</strong> on the <strong>{{ ladder_name }}</strong> ladder at rank <strong>#{{ ladder_player.ranking }}</strong>.</p>
-        <div style="display: flex; gap: 8px;">
-            <form method="POST" action="{{ url_for('ladder_pause') }}">
-                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Pause</button>
-            </form>
-            <form method="POST" action="{{ url_for('ladder_leave') }}" onsubmit="return confirm('Are you sure you want to leave the ladder? Your ranking will be removed.');">
-                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid #e74c3c; color: #e74c3c;">Leave Ladder</button>
-            </form>
-        </div>
+        <form method="POST" action="{{ url_for('ladder_pause') }}">
+            <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Pause</button>
+        </form>
     {% else %}
         <p style="margin-bottom: 12px;">You are <strong>paused</strong> on the <strong>{{ ladder_name }}</strong> ladder at rank <strong>#{{ ladder_player.ranking }}</strong>. You won't be placed in groups until you resume.</p>
-        <div style="display: flex; gap: 8px;">
-            <form method="POST" action="{{ url_for('ladder_unpause') }}">
-                <button type="submit" class="btn btn-primary btn-sm">Resume</button>
-            </form>
-            <form method="POST" action="{{ url_for('ladder_leave') }}" onsubmit="return confirm('Are you sure you want to leave the ladder? Your ranking will be removed.');">
-                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid #e74c3c; color: #e74c3c;">Leave Ladder</button>
-            </form>
-        </div>
+        <form method="POST" action="{{ url_for('ladder_unpause') }}">
+            <button type="submit" class="btn btn-primary btn-sm">Resume</button>
+        </form>
     {% endif %}
 </div>
 
