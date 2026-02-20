@@ -5,20 +5,21 @@
 <h1 class="page-title">{{ ladder_name }} Tennis Ladder</h1>
 
 {% if ladder_groups %}
-{% for lg in ladder_groups %}
-<div class="card" style="{% if not loop.first %}margin-top: 12px;{% endif %}">
-    <div style="padding: 4px 12px 0; font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Group {{ lg.number }}</div>
+<div class="card">
     <table class="ladder-table">
         <thead>
             <tr>
                 <th>Rank</th>
                 <th>Player</th>
-                <th>M/F</th>
                 <th>Opponent</th>
                 <th>Score</th>
             </tr>
         </thead>
         <tbody>
+            {% for lg in ladder_groups %}
+            {% if not loop.first %}
+            <tr><td colspan="4" style="padding: 2px; border: none;"></td></tr>
+            {% endif %}
             {% for r in lg.rows %}
             <tr>
                 <td>{{ r.player.ranking }}</td>
@@ -27,11 +28,8 @@
                         {% if r.player.profile_picture %}
                             <img src="{{ r.player.profile_picture }}" alt="">
                         {% endif %}
-                        {{ r.player.username }}
+                        {{ r.player.username }} <span style="font-size: 0.8rem; color: var(--text-muted);">{{ r.player.ntrp_rating or '' }}{{ r.player.gender or '' }}</span>
                     </div>
-                </td>
-                <td style="font-size: 0.8rem; color: var(--text-muted);">
-                    {{ r.player.gender or '—' }}
                 </td>
                 <td>
                     {% if r.opponent %}
@@ -39,7 +37,7 @@
                         {% if r.opponent.profile_picture %}
                             <img src="{{ r.opponent.profile_picture }}" alt="">
                         {% endif %}
-                        {{ r.opponent.username }}
+                        {{ r.opponent.username }} <span style="font-size: 0.8rem; color: var(--text-muted);">{{ r.opponent.ntrp_rating or '' }}{{ r.opponent.gender or '' }}</span>
                     </div>
                     {% else %}
                         <span style="color: var(--text-muted);">—</span>
@@ -50,10 +48,10 @@
                 </td>
             </tr>
             {% endfor %}
+            {% endfor %}
         </tbody>
     </table>
 </div>
-{% endfor %}
 {% else %}
 <div class="empty-state">
     <p>No players on the ladder yet.</p>
