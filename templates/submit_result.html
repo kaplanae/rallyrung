@@ -92,7 +92,7 @@
         </div>
 
         <div style="display: flex; gap: 12px;">
-            <button type="submit" class="btn btn-primary">Submit Result</button>
+            <button type="submit" class="btn btn-primary" id="submit-btn" disabled style="opacity: 0.5; cursor: not-allowed;">Submit Result</button>
             <a href="{{ url_for('my_group') }}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
@@ -105,6 +105,7 @@ const outcomeSelect = document.getElementById('outcome-type');
 const opponentSelect = document.querySelector('[name="opponent_id"]');
 const winnerGroup = document.getElementById('winner-group');
 const winnerSelect = document.getElementById('winner-select');
+const submitBtn = document.getElementById('submit-btn');
 const scoresSection = document.getElementById('scores-section');
 const set1Row = document.getElementById('set1-row');
 const set2Row = document.getElementById('set2-row');
@@ -363,6 +364,103 @@ function updateScores() {
         set3Row.querySelector('.set-validation').textContent = '';
         setStatus.style.display = 'none';
     }
+    validateForm();
+}
+
+function validateForm() {
+    const outcome = outcomeSelect.value;
+    const oppId = opponentSelect.value;
+    const winnerId = getWinnerId();
+
+    // Must have opponent
+    if (!oppId) { setSubmitEnabled(false); return; }
+
+    // No-winner outcomes just need opponent
+    if (outcome === 'schedule_problem' || outcome === 'weather_problem') {
+        setSubmitEnabled(true); return;
+    }
+
+    // All other outcomes need a winner
+    if (!winnerId) { setSubmitEnabled(false); return; }
+
+    // Forfeit / injury not played — winner + opponent is enough
+    if (outcome === 'forfeit' || outcome === 'injury_not_played') {
+        setSubmitEnabled(true); return;
+    }
+
+    // Injury not finished — allow partial scores
+    if (outcome === 'injury_not_finished') {
+        setSubmitEnabled(true); return;
+    }
+
+    // Completed — need valid scores and winner must match
+    const s1 = getSetScores(1);
+    const s2 = getSetScores(2);
+    if (!s1 || !s2) { setSubmitEnabled(false); return; }
+    if (!isValidSet(s1[0], s1[1])) { setSubmitEnabled(false); return; }
+    if (!isValidSet2(s2[0], s2[1])) { setSubmitEnabled(false); return; }
+
+    const winnerIsMe = winnerId === myId;
+    const set2IsTB = isMatchTiebreakSet(s2[0], s2[1]);
+
+    if (set2IsTB) {
+        // Check TB detail if 7-6
+        if (isSetTiebreak(s1[0], s1[1])) {
+            const tb1 = document.querySelector('[name="set1_tb"]').value;
+            if (!tb1) { setSubmitEnabled(false); return; }
+        }
+        // Check set2 TB detail
+        const tb2 = document.querySelector('[name="set2_tb"]').value;
+        if (!tb2) { setSubmitEnabled(false); return; }
+        // Winner must match
+        const winnerWonS1 = winnerIsMe ? youWonSet(s1) : !youWonSet(s1);
+        const winnerWonTB = winnerIsMe ? (s2[0] === 1) : (s2[1] === 1);
+        if (!winnerWonS1 || !winnerWonTB) { setSubmitEnabled(false); return; }
+        setSubmitEnabled(true); return;
+    }
+
+    // Check set1 TB detail if 7-6
+    if (isSetTiebreak(s1[0], s1[1])) {
+        const tb1 = document.querySelector('[name="set1_tb"]').value;
+        if (!tb1) { setSubmitEnabled(false); return; }
+    }
+    // Check set2 TB detail if 7-6
+    if (isSetTiebreak(s2[0], s2[1])) {
+        const tb2 = document.querySelector('[name="set2_tb"]').value;
+        if (!tb2) { setSubmitEnabled(false); return; }
+    }
+
+    const mySetWins = (youWonSet(s1) ? 1 : 0) + (youWonSet(s2) ? 1 : 0);
+    const oppSetWins = 2 - mySetWins;
+
+    if (mySetWins === 1 && oppSetWins === 1) {
+        // Need set 3
+        const s3 = getSetScores(3);
+        if (!s3 || !isMatchTiebreakSet(s3[0], s3[1])) { setSubmitEnabled(false); return; }
+        const tb3 = document.querySelector('[name="set3_tb"]').value;
+        if (!tb3) { setSubmitEnabled(false); return; }
+        const parts = tb3.split('-');
+        if (parts.length === 2) {
+            const a = parseInt(parts[0]), b = parseInt(parts[1]);
+            if (!isValid10PointTiebreak(a, b)) { setSubmitEnabled(false); return; }
+        }
+        const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
+        const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
+        const winnerSetsWon = winnerIsMe ? finalMyWins : finalOppWins;
+        if (winnerSetsWon < 2) { setSubmitEnabled(false); return; }
+        setSubmitEnabled(true); return;
+    }
+
+    // Straight sets — check winner matches
+    const winnerSetsWon = winnerIsMe ? mySetWins : oppSetWins;
+    if (winnerSetsWon < 2) { setSubmitEnabled(false); return; }
+    setSubmitEnabled(true);
+}
+
+function setSubmitEnabled(enabled) {
+    submitBtn.disabled = !enabled;
+    submitBtn.style.opacity = enabled ? '1' : '0.5';
+    submitBtn.style.cursor = enabled ? 'pointer' : 'not-allowed';
 }
 
 function updateFormState() {
@@ -391,6 +489,7 @@ function updateFormState() {
         scoresSection.style.display = 'none';
         scoresSection.querySelectorAll('input').forEach(inp => inp.value = '');
     }
+    validateForm();
 }
 
 opponentSelect.addEventListener('change', function() {
