@@ -152,7 +152,11 @@
     {% for m in matches %}
     <div class="match-card">
         <div class="match-header">
-            <span class="match-players">{{ m.p1_name }} vs {{ m.p2_name }}</span>
+            <span class="match-players">
+                {% if m.winner_id == m.player1_id %}<strong>{{ m.p1_name }}</strong>{% else %}{{ m.p1_name }}{% endif %}
+                vs
+                {% if m.winner_id == m.player2_id %}<strong>{{ m.p2_name }}</strong>{% else %}{{ m.p2_name }}{% endif %}
+            </span>
             <span class="match-status status-{{ m.status }}">{{ m.status }}</span>
             {% if m.outcome_type and m.outcome_type != 'completed' %}
                 <span class="badge" style="background: rgba(155, 89, 182, 0.15); color: #9b59b6; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; margin-left: 6px;">

@@ -1148,11 +1148,12 @@ def ladder():
     # Build ladder groups of 3 with one row per player
     # Each player appears once on the left with their ranking,
     # opponent rotates: 1v2, 2v3, 3v1 — covers all 3 matchups
-    def get_score(p1, p2):
+    def get_match_info(p1, p2):
+        """Return score string and winner_id for a matchup."""
         key = tuple(sorted([p1['id'], p2['id']]))
         match = match_lookup.get(key)
         if not match or match.get('status') not in ('confirmed', 'pending'):
-            return ''
+            return '', None
         sets = []
         if match.get('set1_p1') is not None:
             is_p1 = match['player1_id'] == p1['id']
@@ -1171,22 +1172,25 @@ def ladder():
                         tb_a, tb_b = (parts[0], parts[1]) if is_p1 else (parts[1], parts[0])
                         score += f"({tb_a})"
                 sets.append(score)
-        return '  '.join(sets)
+        return '  '.join(sets), match.get('winner_id')
+
+    def make_row(p, opp):
+        score, winner_id = get_match_info(p, opp) if opp else ('', None)
+        return {'player': p, 'opponent': opp, 'score': score, 'winner_id': winner_id}
 
     ladder_groups = []
     for i in range(0, len(players), 3):
         gp = players[i:i+3]
         rows = []
         if len(gp) == 3:
-            # 1v2, 2v3, 3v1
-            rows.append({'player': gp[0], 'opponent': gp[1], 'score': get_score(gp[0], gp[1])})
-            rows.append({'player': gp[1], 'opponent': gp[2], 'score': get_score(gp[1], gp[2])})
-            rows.append({'player': gp[2], 'opponent': gp[0], 'score': get_score(gp[2], gp[0])})
+            rows.append(make_row(gp[0], gp[1]))
+            rows.append(make_row(gp[1], gp[2]))
+            rows.append(make_row(gp[2], gp[0]))
         elif len(gp) == 2:
-            rows.append({'player': gp[0], 'opponent': gp[1], 'score': get_score(gp[0], gp[1])})
-            rows.append({'player': gp[1], 'opponent': gp[0], 'score': get_score(gp[1], gp[0])})
+            rows.append(make_row(gp[0], gp[1]))
+            rows.append(make_row(gp[1], gp[0]))
         elif len(gp) == 1:
-            rows.append({'player': gp[0], 'opponent': None, 'score': ''})
+            rows.append(make_row(gp[0], None))
         ladder_groups.append({'number': i // 3 + 1, 'rows': rows})
 
     conn.close()

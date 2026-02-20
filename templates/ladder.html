@@ -23,7 +23,7 @@
             <tr>
                 <td>{{ r.player.ranking }}</td>
                 <td>
-                    <div class="player-cell">
+                    <div class="player-cell" {% if r.winner_id == r.player.id %}style="font-weight: 700;"{% endif %}>
                         {% if r.player.profile_picture %}
                             <img src="{{ r.player.profile_picture }}" alt="">
                         {% endif %}
@@ -35,7 +35,7 @@
                 </td>
                 <td>
                     {% if r.opponent %}
-                    <div class="player-cell">
+                    <div class="player-cell" {% if r.winner_id == r.opponent.id %}style="font-weight: 700;"{% endif %}>
                         {% if r.opponent.profile_picture %}
                             <img src="{{ r.opponent.profile_picture }}" alt="">
                         {% endif %}
@@ -81,9 +81,9 @@
         <div class="match-card">
             <div class="match-header">
                 <span class="match-players">
-                    {% for p in players if p.id == m.player1_id %}{{ p.username }}{% endfor %}
+                    {% for p in players if p.id == m.player1_id %}{% if m.winner_id == p.id %}<strong>{{ p.username }}</strong>{% else %}{{ p.username }}{% endif %}{% endfor %}
                     vs
-                    {% for p in players if p.id == m.player2_id %}{{ p.username }}{% endfor %}
+                    {% for p in players if p.id == m.player2_id %}{% if m.winner_id == p.id %}<strong>{{ p.username }}</strong>{% else %}{{ p.username }}{% endif %}{% endfor %}
                 </span>
                 <span class="match-status status-{{ m.status }}">{{ m.status }}</span>
             </div>
