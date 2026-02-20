@@ -33,9 +33,6 @@
             <select name="winner_id" id="winner-select">
                 <option value="">Select winner...</option>
                 <option value="{{ current_user.id }}">Me ({{ current_user.username }})</option>
-                {% for opp in opponents %}
-                    <option value="{{ opp.id }}">{{ opp.username }}</option>
-                {% endfor %}
             </select>
         </div>
 
@@ -105,6 +102,7 @@
 {% block scripts %}
 <script>
 const outcomeSelect = document.getElementById('outcome-type');
+const opponentSelect = document.querySelector('[name="opponent_id"]');
 const winnerGroup = document.getElementById('winner-group');
 const winnerSelect = document.getElementById('winner-select');
 const scoresSection = document.getElementById('scores-section');
@@ -394,6 +392,24 @@ function updateFormState() {
         scoresSection.querySelectorAll('input').forEach(inp => inp.value = '');
     }
 }
+
+opponentSelect.addEventListener('change', function() {
+    const oppId = this.value;
+    // Remove any existing opponent option from winner dropdown
+    const existing = winnerSelect.querySelector('.opp-option');
+    if (existing) existing.remove();
+    // Reset winner selection
+    winnerSelect.value = '';
+    // Add selected opponent as winner option
+    if (oppId && opponents[oppId]) {
+        const opt = document.createElement('option');
+        opt.value = oppId;
+        opt.textContent = opponents[oppId];
+        opt.className = 'opp-option';
+        winnerSelect.appendChild(opt);
+    }
+    updateScores();
+});
 
 outcomeSelect.addEventListener('change', updateFormState);
 winnerSelect.addEventListener('change', updateScores);
