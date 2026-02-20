@@ -18,7 +18,7 @@
         <tbody>
             {% for lg in ladder_groups %}
             {% if not loop.first %}
-            <tr><td colspan="4" style="padding: 2px; border: none;"></td></tr>
+            <tr><td colspan="4" style="padding: 0; border: none; height: 12px; background: var(--bg);"></td></tr>
             {% endif %}
             {% for r in lg.rows %}
             <tr>
