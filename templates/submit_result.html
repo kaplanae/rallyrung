@@ -271,9 +271,19 @@ function updateScores() {
             set3TbRow.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
             document.querySelector('[name="set3_tb"]') && (document.querySelector('[name="set3_tb"]').value = '');
             set3Row.querySelector('.set-validation').textContent = '';
-            if (winnerName) {
-                setStatus.textContent = `${winnerName} wins 2-0 (match tiebreak)`;
-                setStatus.style.display = '';
+            if (winnerId) {
+                // Check: winner must have won set 1 and the TB set
+                const winnerWonS1 = winnerIsMe ? youWonSet(s1) : !youWonSet(s1);
+                const winnerWonTB = winnerIsMe ? (s2[0] === 1) : (s2[1] === 1);
+                if (!winnerWonS1 || !winnerWonTB) {
+                    setStatus.textContent = 'Scores do not match winner';
+                    setStatus.style.color = '#e74c3c';
+                    setStatus.style.display = '';
+                } else {
+                    setStatus.textContent = `${winnerName} wins 2-0 (match tiebreak)`;
+                    setStatus.style.color = 'var(--accent)';
+                    setStatus.style.display = '';
+                }
             }
         } else {
             const mySetWins = (youWonSet(s1) ? 1 : 0) + (youWonSet(s2) ? 1 : 0);
@@ -297,14 +307,21 @@ function updateScores() {
 
                         // Check if TB score is filled and valid
                         const tbVal = document.querySelector('[name="set3_tb"]').value;
-                        if (tbVal && winnerName) {
+                        if (tbVal && winnerId) {
                             const parts = tbVal.split('-');
                             if (parts.length === 2) {
                                 const tbA = parseInt(parts[0]), tbB = parseInt(parts[1]);
                                 if (isValid10PointTiebreak(tbA, tbB)) {
                                     const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
                                     const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
-                                    setStatus.textContent = `${winnerName} wins ${winnerIsMe ? finalMyWins : finalOppWins}-${winnerIsMe ? finalOppWins : finalMyWins}`;
+                                    const winnerSetsWon = winnerIsMe ? finalMyWins : finalOppWins;
+                                    if (winnerSetsWon < 2) {
+                                        setStatus.textContent = 'Scores do not match winner';
+                                        setStatus.style.color = '#e74c3c';
+                                    } else {
+                                        setStatus.textContent = `${winnerName} wins ${winnerIsMe ? finalMyWins : finalOppWins}-${winnerIsMe ? finalOppWins : finalMyWins}`;
+                                        setStatus.style.color = 'var(--accent)';
+                                    }
                                 }
                             }
                         }
@@ -326,8 +343,15 @@ function updateScores() {
                 document.querySelector('[name="set3_tb"]') && (document.querySelector('[name="set3_tb"]').value = '');
                 set3Row.querySelector('.set-validation').textContent = '';
 
-                if (winnerName) {
-                    setStatus.textContent = `${winnerName} wins ${Math.max(mySetWins, oppSetWins)}-${Math.min(mySetWins, oppSetWins)}`;
+                if (winnerId) {
+                    const winnerSetsWon = winnerIsMe ? mySetWins : oppSetWins;
+                    if (winnerSetsWon < 2) {
+                        setStatus.textContent = 'Scores do not match winner';
+                        setStatus.style.color = '#e74c3c';
+                    } else {
+                        setStatus.textContent = `${winnerName} wins ${Math.max(mySetWins, oppSetWins)}-${Math.min(mySetWins, oppSetWins)}`;
+                        setStatus.style.color = 'var(--accent)';
+                    }
                     setStatus.style.display = '';
                 }
             }
