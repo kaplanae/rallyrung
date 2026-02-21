@@ -2484,11 +2484,17 @@ def admin_delete_user():
     cur = conn.cursor()
     ph = get_placeholder()
 
-    # Delete from related tables first
-    cur.execute(f'DELETE FROM player_availability WHERE user_id = {ph}', (user_id,))
+    # Delete from related tables first (order matters for foreign keys)
     cur.execute(f'DELETE FROM match_bookings WHERE requester_id = {ph} OR opponent_id = {ph}', (user_id, user_id))
+    cur.execute(f'DELETE FROM player_availability WHERE user_id = {ph}', (user_id,))
+    cur.execute(f'DELETE FROM matches WHERE player1_id = {ph} OR player2_id = {ph}', (user_id, user_id))
     cur.execute(f'DELETE FROM monthly_results WHERE user_id = {ph}', (user_id,))
     cur.execute(f'DELETE FROM ladder_players WHERE user_id = {ph}', (user_id,))
+    # Null out references in monthly_groups instead of deleting the groups
+    cur.execute(f'UPDATE monthly_groups SET player1_id = NULL WHERE player1_id = {ph}', (user_id,))
+    cur.execute(f'UPDATE monthly_groups SET player2_id = NULL WHERE player2_id = {ph}', (user_id,))
+    cur.execute(f'UPDATE monthly_groups SET player3_id = NULL WHERE player3_id = {ph}', (user_id,))
+    cur.execute(f'DELETE FROM magic_tokens WHERE email = (SELECT email FROM users WHERE id = {ph})', (user_id,))
 
     cur.execute(f'SELECT username FROM users WHERE id = {ph}', (user_id,))
     row = cur.fetchone()
