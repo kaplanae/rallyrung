@@ -2471,6 +2471,36 @@ def admin_toggle_admin():
     return redirect(url_for('admin'))
 
 
+@app.route('/admin/delete-user', methods=['POST'])
+@login_required
+@require_admin
+def admin_delete_user():
+    user_id = int(request.form.get('user_id', 0))
+    if user_id == current_user.id:
+        flash('You cannot delete yourself.')
+        return redirect(url_for('admin'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # Delete from related tables first
+    cur.execute(f'DELETE FROM player_availability WHERE user_id = {ph}', (user_id,))
+    cur.execute(f'DELETE FROM match_bookings WHERE requester_id = {ph} OR opponent_id = {ph}', (user_id, user_id))
+    cur.execute(f'DELETE FROM monthly_results WHERE user_id = {ph}', (user_id,))
+    cur.execute(f'DELETE FROM ladder_players WHERE user_id = {ph}', (user_id,))
+
+    cur.execute(f'SELECT username FROM users WHERE id = {ph}', (user_id,))
+    row = cur.fetchone()
+    username = dict(row)['username'] if row else 'Unknown'
+
+    cur.execute(f'DELETE FROM users WHERE id = {ph}', (user_id,))
+    conn.commit()
+    conn.close()
+    flash(f'User "{username}" deleted.')
+    return redirect(url_for('admin'))
+
+
 @app.route('/admin/generate-groups', methods=['POST'])
 @login_required
 @require_admin
