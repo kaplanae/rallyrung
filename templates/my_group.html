@@ -99,7 +99,13 @@
     {# Show bookable slots #}
     {% set slots = opponent_slots.get(opp_id, []) %}
     {% if slots %}
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Available 2-hour slots (overlapping with yours):</p>
+        {% if availability.get(opp_id) and availability.get(current_user.id) %}
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Available 2-hour slots (overlapping times):</p>
+        {% elif availability.get(opp_id) %}
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Book from their availability:</p>
+        {% else %}
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Book from your availability:</p>
+        {% endif %}
         <div style="max-height: 300px; overflow-y: auto;">
             <table class="ladder-table" style="font-size: 0.85rem;">
                 <thead>
@@ -135,9 +141,9 @@
         </div>
     {% elif availability.get(opp_id) and availability.get(current_user.id) %}
         <p style="font-size: 0.85rem; color: var(--text-muted);">No overlapping times found this month.</p>
-    {% elif not availability.get(current_user.id) %}
+    {% elif not availability.get(current_user.id) and not availability.get(opp_id) %}
         <p style="font-size: 0.85rem; color: var(--text-muted);">
-            Set your <a href="{{ url_for('availability') }}" style="color: var(--accent);">availability</a> to see bookable slots.
+            Neither of you has set <a href="{{ url_for('availability') }}" style="color: var(--accent);">availability</a> yet.
         </p>
     {% endif %}
 </div>

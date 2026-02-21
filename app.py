@@ -884,7 +884,10 @@ def format_hour(hour):
 
 
 def compute_bookable_slots(my_avail, opp_avail, all_bookings, my_id, opp_id):
-    """Compute available 2-hour booking slots from overlapping date-specific availability."""
+    """Compute available 2-hour booking slots.
+    If both have availability, use overlapping windows.
+    If only one has availability, use that player's windows directly.
+    """
     today = date.today()
 
     my_windows = defaultdict(list)
@@ -903,27 +906,42 @@ def compute_bookable_slots(my_avail, opp_avail, all_bookings, my_id, opp_id):
                 for h in range(b['start_hour'], b['end_hour']):
                     booked.add((b['match_date'], h))
 
-    # Find dates where both players have availability
-    common_dates = sorted(set(my_windows.keys()) & set(opp_windows.keys()))
+    # Determine which windows to use
+    both_have = bool(my_avail) and bool(opp_avail)
+
+    if both_have:
+        # Use overlapping windows
+        common_dates = sorted(set(my_windows.keys()) & set(opp_windows.keys()))
+        windows_to_check = []
+        for date_str in common_dates:
+            for ms, me in my_windows[date_str]:
+                for os_, oe in opp_windows[date_str]:
+                    start = max(ms, os_)
+                    end = min(me, oe)
+                    if end - start >= 2:
+                        windows_to_check.append((date_str, start, end))
+    else:
+        # Use whichever player has availability
+        source = my_windows if my_avail else opp_windows
+        windows_to_check = []
+        for date_str in sorted(source.keys()):
+            for s, e in source[date_str]:
+                if e - s >= 2:
+                    windows_to_check.append((date_str, s, e))
 
     slots = []
-    for date_str in common_dates:
+    for date_str, start, end in windows_to_check:
         d = date.fromisoformat(date_str)
         if d <= today:
             continue
-        for ms, me in my_windows[date_str]:
-            for os_, oe in opp_windows[date_str]:
-                start = max(ms, os_)
-                end = min(me, oe)
-                if end - start >= 2:
-                    for h in range(start, end - 1):
-                        if (date_str, h) not in booked and (date_str, h + 1) not in booked:
-                            slots.append({
-                                'date': date_str,
-                                'date_display': d.strftime('%a, %b %d'),
-                                'start_hour': h,
-                                'end_hour': h + 2,
-                            })
+        for h in range(start, end - 1):
+            if (date_str, h) not in booked and (date_str, h + 1) not in booked:
+                slots.append({
+                    'date': date_str,
+                    'date_display': d.strftime('%a, %b %d'),
+                    'start_hour': h,
+                    'end_hour': h + 2,
+                })
 
     return slots
 
