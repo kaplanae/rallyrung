@@ -177,6 +177,7 @@ def init_db():
             ladder_id INTEGER NOT NULL REFERENCES ladders(id),
             ranking INTEGER NOT NULL,
             is_active BOOLEAN DEFAULT TRUE,
+            pending BOOLEAN DEFAULT FALSE,
             inactive_months INTEGER DEFAULT 0,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, ladder_id)
@@ -280,6 +281,7 @@ def init_db():
             ladder_id INTEGER NOT NULL REFERENCES ladders(id),
             ranking INTEGER NOT NULL,
             is_active INTEGER DEFAULT 1,
+            pending INTEGER DEFAULT 0,
             inactive_months INTEGER DEFAULT 0,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, ladder_id)
@@ -384,6 +386,14 @@ def init_db():
         conn.rollback()
     try:
         cur.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        if USE_POSTGRES:
+            cur.execute("ALTER TABLE ladder_players ADD COLUMN pending BOOLEAN DEFAULT FALSE")
+        else:
+            cur.execute("ALTER TABLE ladder_players ADD COLUMN pending INTEGER DEFAULT 0")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -1805,47 +1815,35 @@ def ladder_join():
     cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
                 (email, phone, ntrp_rating, current_user.id))
 
-    # Find insertion point: after the last player with same or higher NTRP rating
+    # Insert as pending — will be activated at next monthly reset
     cur.execute(f'''
-        SELECT lp.ranking, u.ntrp_rating
-        FROM ladder_players lp
-        JOIN users u ON lp.user_id = u.id
-        WHERE lp.ladder_id = {ph}
-        ORDER BY lp.ranking ASC
-    ''', (ladder_id,))
-    players = [dict(r) for r in cur.fetchall()]
-
-    submitted_rating = float(ntrp_rating)
-    max_rank_at_or_above = 0
-    for p in players:
-        try:
-            player_rating = float(p['ntrp_rating']) if p['ntrp_rating'] else 0
-        except (ValueError, TypeError):
-            player_rating = 0
-        if player_rating >= submitted_rating:
-            max_rank_at_or_above = max(max_rank_at_or_above, p['ranking'])
-
-    if max_rank_at_or_above > 0:
-        new_ranking = max_rank_at_or_above + 1
-    else:
-        new_ranking = 1
-
-    # Shift everyone at or below the new ranking down by 1
-    cur.execute(f'''
-        UPDATE ladder_players SET ranking = ranking + 1
-        WHERE ladder_id = {ph} AND ranking >= {ph}
-    ''', (ladder_id, new_ranking))
-
-    cur.execute(f'''
-        INSERT INTO ladder_players (user_id, ladder_id, ranking)
-        VALUES ({ph}, {ph}, {ph})
-    ''', (current_user.id, ladder_id, new_ranking))
+        INSERT INTO ladder_players (user_id, ladder_id, ranking, is_active, pending)
+        VALUES ({ph}, {ph}, 0, {ph}, {ph})
+    ''', (current_user.id, ladder_id, 0,
+          False if USE_POSTGRES else 0,
+          True if USE_POSTGRES else 1))
 
     conn.commit()
     conn.close()
     session['ladder_id'] = ladder_id
     ladder_name = get_ladder_name(ladder_id)
-    flash(f'Welcome to the {ladder_name} ladder! You have been placed at rank #{new_ranking}.')
+
+    # Figure out next month name for the message
+    import calendar
+    month, year = get_current_month_year()
+    next_month = month + 1 if month < 12 else 1
+    next_month_name = calendar.month_name[next_month]
+    flash(f'You\'ve signed up for the {ladder_name} ladder! You\'ll be placed on the ladder in {next_month_name}.')
+
+    # Send confirmation email
+    cur_user_email = email or current_user.email
+    if cur_user_email:
+        send_email(cur_user_email, f"You're signed up for the {ladder_name} ladder!",
+            email_wrap(f'''<p>Hi {current_user.username},</p>
+<p>You've signed up for the <strong>{ladder_name} Singles Tennis Ladder</strong>!</p>
+<p>You'll be added to the ladder at the beginning of <strong>{next_month_name}</strong>. We'll email you when you're placed.</p>''',
+                f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+
     return redirect(url_for('profile'))
 
 
@@ -2867,6 +2865,44 @@ def admin_monthly_reset():
 <p><a href="https://rallyrung.com/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>''',
                                     f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
 
+    # Activate pending players — add them to the bottom of the ladder
+    cur.execute(f'''
+        SELECT lp.id, lp.user_id, u.ntrp_rating, u.username, u.email
+        FROM ladder_players lp
+        JOIN users u ON lp.user_id = u.id
+        WHERE lp.ladder_id = {ph} AND lp.pending = {ph}
+        ORDER BY u.ntrp_rating DESC, lp.joined_at ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1))
+    pending_players = [dict(r) for r in cur.fetchall()]
+
+    if pending_players:
+        # Get current max ranking
+        cur.execute(f'''
+            SELECT COALESCE(MAX(ranking), 0) as max_rank FROM ladder_players
+            WHERE ladder_id = {ph} AND is_active = {ph} AND pending = {ph}
+        ''', (ladder_id, True if USE_POSTGRES else 1, False if USE_POSTGRES else 0))
+        max_rank = dict(cur.fetchone())['max_rank']
+
+        for i, pp in enumerate(pending_players):
+            new_rank = max_rank + i + 1
+            cur.execute(f'''
+                UPDATE ladder_players SET ranking = {ph}, is_active = {ph}, pending = {ph}
+                WHERE id = {ph}
+            ''', (new_rank, True if USE_POSTGRES else 1, False if USE_POSTGRES else 0, pp['id']))
+            rankings[pp['user_id']] = new_rank
+
+            # Email the player
+            if pp.get('email'):
+                send_email(pp['email'],
+                    f"You're on the {ladder_name} ladder!",
+                    email_wrap(f'''<p>Hi {pp['username']},</p>
+<p>You've been placed on the <strong>{ladder_name} Singles Tennis Ladder</strong> at rank <strong>#{new_rank}</strong>.</p>
+<p>Groups will be assigned shortly. Check your group and schedule matches!</p>
+<p><a href="https://rallyrung.com/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>''',
+                        f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+
+    pending_msg = f' {len(pending_players)} new player(s) added.' if pending_players else ''
+
     # Update archived new_ranking
     for uid in movements:
         new_rank = rankings.get(uid, 0)
@@ -2878,7 +2914,7 @@ def admin_monthly_reset():
     conn.commit()
     conn.close()
     drop_msg = f' {dropped_count} player(s) auto-dropped for inactivity.' if dropped_count else ''
-    flash(f'Monthly reset complete for {month}/{year}. Rankings updated.{drop_msg}')
+    flash(f'Monthly reset complete for {month}/{year}. Rankings updated.{pending_msg}{drop_msg}')
     return redirect(url_for('admin'))
 
 
