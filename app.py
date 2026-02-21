@@ -1920,12 +1920,13 @@ def ladder_unpause():
 def edit_profile():
     email = request.form.get('email', '').strip()
     phone = request.form.get('phone', '').strip()
+    ntrp = request.form.get('ntrp_rating', '').strip()
 
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
-    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph} WHERE id = {ph}',
-                (email, phone, current_user.id))
+    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
+                (email, phone, ntrp, current_user.id))
     conn.commit()
     conn.close()
     flash('Profile updated.')

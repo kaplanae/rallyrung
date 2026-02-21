@@ -45,46 +45,54 @@
     <div class="card-header">
         <h3>Edit Profile</h3>
     </div>
-    <form method="POST" action="{{ url_for('edit_profile') }}">
+    <form id="profile-form" method="POST" action="{{ url_for('edit_profile') }}">
         <div class="form-group">
             <label>Email</label>
             <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="you@example.com">
         </div>
-        <div class="form-group">
-            <label>Phone</label>
-            <input type="tel" name="phone" value="{{ current_user.phone or '' }}" placeholder="(555) 123-4567">
-        </div>
-        <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
-    </form>
-</div>
-
-<div class="card">
-    <div class="card-header">
-        <h3>Ladder Status</h3>
-    </div>
-    {% if not ladder_player %}
-        <p style="margin-bottom: 4px;">You are <strong>not yet on the {{ ladder_name }} ladder</strong>.</p>
-        <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">Select your NTRP rating and click "Join Ladder" to be placed on the ladder and start competing.</p>
-        <form method="POST" action="{{ url_for('ladder_join') }}">
-            <input type="hidden" name="ladder_id" value="{{ current_ladder_id }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Phone</label>
+                <input type="tel" name="phone" value="{{ current_user.phone or '' }}" placeholder="(555) 123-4567">
+            </div>
             <div class="form-group">
                 <label>NTRP Rating</label>
-                <select name="ntrp_rating" required>
-                    <option value="">Select your level...</option>
+                <select name="ntrp_rating" id="ntrp-select">
+                    <option value="">Select...</option>
                     {% for r in ['2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5'] %}
                         <option value="{{ r }}" {{ 'selected' if current_user.ntrp_rating == r }}>{{ r }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" class="btn btn-primary btn-sm">Join Ladder</button>
+        </div>
+        {% if not ladder_player %}
+            <input type="hidden" name="ladder_id" value="{{ current_ladder_id }}">
+            <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">You are not yet on the {{ ladder_name }} ladder. Save your profile anytime, or click "Join Ladder" to start competing.</p>
+            <div style="display: flex; gap: 10px;">
+                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Save Profile</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="
+                    var rating = document.getElementById('ntrp-select').value;
+                    if (!rating) { alert('Please select an NTRP rating to join the ladder.'); return; }
+                    var form = document.getElementById('profile-form');
+                    form.action = '{{ url_for('ladder_join') }}';
+                    form.submit();
+                ">Join Ladder</button>
+            </div>
+        {% else %}
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
+                {% if ladder_player.is_active %}
+                    <span style="color: var(--text-muted); font-size: 0.9rem;">Active on {{ ladder_name }} — Rank #{{ ladder_player.ranking }}</span>
+                {% endif %}
+            </div>
+        {% endif %}
+    </form>
+    {% if ladder_player and ladder_player.is_active %}
+        <form method="POST" action="{{ url_for('ladder_pause') }}" style="margin-top: 12px;">
+            <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Temporarily Leave Ladder</button>
         </form>
-    {% elif ladder_player.is_active %}
-        <p style="margin-bottom: 12px;">You are <strong>active</strong> on the <strong>{{ ladder_name }}</strong> ladder at rank <strong>#{{ ladder_player.ranking }}</strong>.</p>
-        <form method="POST" action="{{ url_for('ladder_pause') }}">
-            <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Temporarily Leave Ladder</button>
-        </form>
-    {% else %}
-        <p style="margin-bottom: 12px;">You have <strong>temporarily left</strong> the <strong>{{ ladder_name }}</strong> ladder. Your rank was <strong>#{{ ladder_player.ranking }}</strong>. You won't be placed in groups until you rejoin.</p>
+    {% elif ladder_player and not ladder_player.is_active %}
+        <p style="margin-top: 12px; margin-bottom: 12px; color: var(--text-muted); font-size: 0.9rem;">You have temporarily left the {{ ladder_name }} ladder. Your rank was #{{ ladder_player.ranking }}.</p>
         <form method="POST" action="{{ url_for('ladder_unpause') }}">
             <button type="submit" class="btn btn-primary btn-sm">Rejoin Ladder</button>
         </form>
