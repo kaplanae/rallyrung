@@ -1055,7 +1055,15 @@ def signup():
         is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True))
     )
     login_user(user)
-    flash(f'Welcome to RallyRung, {user.username}!')
+
+    # Send welcome email
+    send_email(email, "Welcome to RallyRung!", email_wrap(f'''
+        <p>Hi {username},</p>
+        <p>Welcome to RallyRung! Your account has been created.</p>
+        <p>Head to your <a href="{url_for('profile', _external=True)}">profile</a> to complete your setup and join a ladder.</p>
+    '''))
+
+    flash(f'Welcome to RallyRung, {user.username}! Complete your profile and join a ladder to start competing.')
     return redirect(url_for('profile'))
 
 
@@ -1912,13 +1920,12 @@ def ladder_unpause():
 def edit_profile():
     email = request.form.get('email', '').strip()
     phone = request.form.get('phone', '').strip()
-    ntrp = request.form.get('ntrp_rating', '').strip()
 
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
-    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
-                (email, phone, ntrp, current_user.id))
+    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph} WHERE id = {ph}',
+                (email, phone, current_user.id))
     conn.commit()
     conn.close()
     flash('Profile updated.')
