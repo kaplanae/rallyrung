@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 import json
 import csv
@@ -25,7 +26,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 # Flask-Login setup
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'index'
+login_manager.login_view = 'login'
 
 # OAuth setup
 oauth = OAuth(app)
@@ -102,7 +103,8 @@ def get_db():
 
 class User(UserMixin):
     def __init__(self, id, username, email=None, google_id=None, profile_picture=None,
-                 phone=None, ntrp_rating=None, gender=None, is_admin=False, is_active=True):
+                 phone=None, ntrp_rating=None, gender=None, is_admin=False, is_active=True,
+                 password_hash=None):
         self.id = id
         self.username = username
         self.email = email
@@ -113,6 +115,7 @@ class User(UserMixin):
         self.gender = gender
         self.is_admin = is_admin
         self._is_active = is_active
+        self.password_hash = password_hash
 
     @property
     def is_active(self):
@@ -156,6 +159,7 @@ def init_db():
             ntrp_rating TEXT,
             gender TEXT,
             profile_picture TEXT,
+            password_hash TEXT,
             is_admin BOOLEAN DEFAULT FALSE,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -258,6 +262,7 @@ def init_db():
             ntrp_rating TEXT,
             gender TEXT,
             profile_picture TEXT,
+            password_hash TEXT,
             is_admin INTEGER DEFAULT 0,
             is_active INTEGER DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -374,6 +379,11 @@ def init_db():
         conn.rollback()
     try:
         cur.execute("ALTER TABLE matches ADD COLUMN set3_tb TEXT")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -947,6 +957,107 @@ def compute_bookable_slots(my_avail, opp_avail, all_bookings, my_id, opp_id):
 
 
 # ============ AUTH ROUTES ============
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('ladder'))
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+
+        if not email or not password:
+            flash('Email and password are required.')
+            return redirect(url_for('login'))
+
+        conn = get_db()
+        cur = conn.cursor()
+        ph = get_placeholder()
+        cur.execute(f'SELECT * FROM users WHERE email = {ph}', (email,))
+        row = cur.fetchone()
+        conn.close()
+
+        if not row:
+            flash('Invalid email or password.')
+            return redirect(url_for('login'))
+
+        row = dict(row)
+        if not row.get('password_hash'):
+            flash('This account uses Google sign-in. Please sign in with Google, or set a password on your profile.')
+            return redirect(url_for('login'))
+
+        if not check_password_hash(row['password_hash'], password):
+            flash('Invalid email or password.')
+            return redirect(url_for('login'))
+
+        user = User(
+            id=row['id'], username=row['username'], email=row.get('email'),
+            google_id=row.get('google_id'), profile_picture=row.get('profile_picture'),
+            phone=row.get('phone'), ntrp_rating=row.get('ntrp_rating'),
+            gender=row.get('gender'),
+            is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True))
+        )
+        login_user(user)
+        user_ladders = get_user_ladders(user.id)
+        if user_ladders:
+            session['ladder_id'] = user_ladders[0]['id']
+            return redirect(url_for('ladder'))
+        else:
+            return redirect(url_for('choose_ladder'))
+
+    return render_template('login.html')
+
+
+@app.route('/signup', methods=['POST'])
+def signup():
+    if current_user.is_authenticated:
+        return redirect(url_for('ladder'))
+
+    username = request.form.get('username', '').strip()
+    email = request.form.get('email', '').strip().lower()
+    password = request.form.get('password', '')
+    confirm_password = request.form.get('confirm_password', '')
+
+    if not username or not email or not password or not confirm_password:
+        flash('All fields are required.')
+        return redirect(url_for('login'))
+
+    if password != confirm_password:
+        flash('Passwords do not match.')
+        return redirect(url_for('login'))
+
+    if len(password) < 6:
+        flash('Password must be at least 6 characters.')
+        return redirect(url_for('login'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT id FROM users WHERE email = {ph}', (email,))
+    if cur.fetchone():
+        conn.close()
+        flash('An account with this email already exists.')
+        return redirect(url_for('login'))
+
+    hashed = generate_password_hash(password)
+    cur.execute(f'''INSERT INTO users (username, email, password_hash)
+        VALUES ({ph}, {ph}, {ph})''', (username, email, hashed))
+    conn.commit()
+
+    cur.execute(f'SELECT * FROM users WHERE email = {ph}', (email,))
+    row = dict(cur.fetchone())
+    conn.close()
+
+    user = User(
+        id=row['id'], username=row['username'], email=row.get('email'),
+        is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True))
+    )
+    login_user(user)
+    flash(f'Welcome to RallyRung, {user.username}!')
+    return redirect(url_for('profile'))
+
 
 @app.route('/auth/google')
 def google_login():
