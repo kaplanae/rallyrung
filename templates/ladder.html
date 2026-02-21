@@ -24,20 +24,20 @@
             <tr>
                 <td>{{ r.player.ranking }}</td>
                 <td>
-                    <div class="player-cell" {% if r.winner_id == r.player.id %}style="font-weight: 700;"{% endif %}>
+                    <div class="player-cell" {% if r.winner_id == r.player.id %}style="font-weight: 700; color: #2ecc71;"{% endif %}>
                         {% if r.player.profile_picture %}
                             <img src="{{ r.player.profile_picture }}" alt="">
                         {% endif %}
-                        {{ r.player.username }} <span style="font-size: 0.8rem; color: var(--text-muted);">{{ r.player.ntrp_rating or '' }}{{ r.player.gender or '' }}</span>
+                        {{ r.player.username }} <span style="font-size: 0.8rem; color: {% if r.winner_id == r.player.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.player.ntrp_rating or '' }}{{ r.player.gender or '' }}</span>
                     </div>
                 </td>
                 <td>
                     {% if r.opponent %}
-                    <div class="player-cell" {% if r.winner_id == r.opponent.id %}style="font-weight: 700;"{% endif %}>
+                    <div class="player-cell" {% if r.winner_id == r.opponent.id %}style="font-weight: 700; color: #2ecc71;"{% endif %}>
                         {% if r.opponent.profile_picture %}
                             <img src="{{ r.opponent.profile_picture }}" alt="">
                         {% endif %}
-                        <span style="font-size: 0.8rem; color: var(--text-muted);">{{ r.opponent.ranking }}</span> {{ r.opponent.username }} <span style="font-size: 0.8rem; color: var(--text-muted);">{{ r.opponent.ntrp_rating or '' }}{{ r.opponent.gender or '' }}</span>
+                        <span style="font-size: 0.8rem; color: {% if r.winner_id == r.opponent.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.opponent.ranking }}</span> {{ r.opponent.username }} <span style="font-size: 0.8rem; color: {% if r.winner_id == r.opponent.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.opponent.ntrp_rating or '' }}{{ r.opponent.gender or '' }}</span>
                     </div>
                     {% else %}
                         <span style="color: var(--text-muted);">—</span>
