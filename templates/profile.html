@@ -67,16 +67,16 @@
         </div>
         {% if not ladder_player %}
             <input type="hidden" name="ladder_id" value="{{ current_ladder_id }}">
-            <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">You are not yet on the {{ ladder_name }} ladder. Save your profile anytime, or click "Join Ladder" to start competing.</p>
+            <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">You are not yet on the {{ ladder_name }} ladder. Fill in your details and click "Join Ladder" to start competing.</p>
             <div style="display: flex; gap: 10px;">
-                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Save Profile</button>
+                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Save Profile Only</button>
                 <button type="button" class="btn btn-primary btn-sm" onclick="
                     var rating = document.getElementById('ntrp-select').value;
                     if (!rating) { alert('Please select an NTRP rating to join the ladder.'); return; }
                     var form = document.getElementById('profile-form');
                     form.action = '{{ url_for('ladder_join') }}';
                     form.submit();
-                ">Join Ladder</button>
+                ">Save &amp; Join Ladder</button>
             </div>
         {% else %}
             <div style="display: flex; gap: 10px; align-items: center;">

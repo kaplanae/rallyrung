@@ -1799,9 +1799,11 @@ def ladder_join():
         flash('You are already on the ladder.')
         return redirect(url_for('profile'))
 
-    # Update user's NTRP rating
-    cur.execute(f'UPDATE users SET ntrp_rating = {ph} WHERE id = {ph}',
-                (ntrp_rating, current_user.id))
+    # Save profile fields + NTRP rating
+    email = request.form.get('email', '').strip()
+    phone = request.form.get('phone', '').strip()
+    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
+                (email, phone, ntrp_rating, current_user.id))
 
     # Find insertion point: after the last player with same or higher NTRP rating
     cur.execute(f'''
