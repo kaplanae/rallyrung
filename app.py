@@ -1398,6 +1398,36 @@ def submit_result():
                     conn.close()
                     return redirect(url_for('submit_result'))
 
+                # Check if sets are split and 3rd set is needed
+                s1_winner_p1 = sets[0][0] > sets[0][1]
+                s2_tb = (sets[1][0] == 1 and sets[1][1] == 0) or (sets[1][0] == 0 and sets[1][1] == 1)
+                if not s2_tb:
+                    s2_winner_p1 = sets[1][0] > sets[1][1]
+                    if s1_winner_p1 != s2_winner_p1:
+                        # Split sets — need set 3
+                        if sets[2] == (None, None):
+                            flash('Sets are split 1-1. A 3rd set tiebreak is required.')
+                            conn.close()
+                            return redirect(url_for('submit_result'))
+
+                # Verify winner matches scores
+                p1_sets = 0
+                for s in range(3):
+                    if sets[s] == (None, None):
+                        continue
+                    if sets[s][0] > sets[s][1]:
+                        p1_sets += 1
+                p2_sets = sum(1 for s in range(3) if sets[s] != (None, None)) - p1_sets
+                # p1 is current_user at this point (before reorder)
+                my_sets = p1_sets
+                opp_sets = p2_sets
+                winner_is_me = winner_id == current_user.id
+                winner_sets = my_sets if winner_is_me else opp_sets
+                if winner_sets < 2:
+                    flash('Scores do not match winner.')
+                    conn.close()
+                    return redirect(url_for('submit_result'))
+
         # Check for duplicate submission
         cur.execute(f'''
             SELECT id FROM matches WHERE group_id = {ph}
