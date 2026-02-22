@@ -2356,7 +2356,7 @@ def admin():
         if r['pending'] if USE_POSTGRES else r['pending'] == 1:
             ladder_status[r['user_id']] = 'pending'
         elif r['is_active'] if USE_POSTGRES else r['is_active'] == 1:
-            ladder_status[r['user_id']] = f"active (#{r['ranking']})"
+            ladder_status[r['user_id']] = 'active'
         else:
             ladder_status[r['user_id']] = 'paused'
 
