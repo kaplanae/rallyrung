@@ -1819,7 +1819,7 @@ def ladder_join():
     cur.execute(f'''
         INSERT INTO ladder_players (user_id, ladder_id, ranking, is_active, pending)
         VALUES ({ph}, {ph}, 0, {ph}, {ph})
-    ''', (current_user.id, ladder_id, 0,
+    ''', (current_user.id, ladder_id,
           False if USE_POSTGRES else 0,
           True if USE_POSTGRES else 1))
 
