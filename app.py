@@ -1888,7 +1888,22 @@ def ladder_leave():
             WHERE ladder_id = {ph} AND ranking > {ph}
         ''', (ladder_id, old_ranking))
         conn.commit()
+        ladder_name = get_ladder_name(ladder_id)
         flash('You have left the ladder.')
+
+        # Email the user
+        if current_user.email:
+            send_email(current_user.email, f"You've left the {ladder_name} ladder",
+                email_wrap(f'''<p>Hi {current_user.username},</p>
+<p>You've been removed from the <strong>{ladder_name} Singles Tennis Ladder</strong>.</p>
+<p>You can rejoin anytime from your <a href="{url_for('profile', _external=True)}">profile page</a>.</p>''',
+                    f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+
+        # Notify admins
+        send_email(ADMIN_EMAILS, f"Player left ladder: {current_user.username}",
+            email_wrap(f'''<p><strong>{current_user.username}</strong> has left the {ladder_name} ladder.</p>
+<p>Email: {current_user.email or 'none'}</p>''',
+                f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
     else:
         flash('You are not on the ladder.')
 
