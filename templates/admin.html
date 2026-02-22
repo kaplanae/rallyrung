@@ -114,11 +114,16 @@
                 <td style="font-size: 0.8rem;">{{ pp.phone or "—" }}</td>
                 <td>{{ pp.ntrp_rating or "—" }}</td>
                 <td style="font-size: 0.8rem; color: var(--text-muted);">{{ pp.joined_at.strftime('%b %d') if pp.joined_at else "—" }}</td>
-                <td>
+                <td style="display: flex; gap: 4px; flex-wrap: wrap;">
                     <form method="POST" action="{{ url_for('admin_remove_from_ladder') }}" class="inline-form"
                           onsubmit="return confirm('Remove {{ pp.username }} from pending?')">
                         <input type="hidden" name="user_id" value="{{ pp.user_id }}">
-                        <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                        <button type="submit" class="btn btn-secondary btn-sm">Remove from Pending</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_delete_user') }}" class="inline-form"
+                          onsubmit="return confirm('Delete {{ pp.username }} entirely? This removes the user account and cannot be undone.');">
+                        <input type="hidden" name="user_id" value="{{ pp.user_id }}">
+                        <button type="submit" class="btn btn-sm" style="background: #e74c3c; color: #fff;">Delete User</button>
                     </form>
                 </td>
             </tr>

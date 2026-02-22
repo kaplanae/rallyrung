@@ -79,10 +79,14 @@
                 ">Save &amp; Join Ladder</button>
             </div>
         {% elif ladder_player.pending %}
-            <div style="display: flex; gap: 10px; align-items: center;">
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                 <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
                 <span style="color: var(--accent); font-size: 0.9rem;">Signed up — you'll be placed on the {{ ladder_name }} ladder next month</span>
             </div>
+            <form method="POST" action="{{ url_for('ladder_leave') }}" style="margin-top: 12px;"
+                  onsubmit="return confirm('Cancel your ladder signup?');">
+                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Cancel Signup</button>
+            </form>
         {% else %}
             <div style="display: flex; gap: 10px; align-items: center;">
                 <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
