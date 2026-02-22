@@ -2274,15 +2274,25 @@ def admin():
     cur.execute('SELECT * FROM users ORDER BY username')
     all_users = [dict(r) for r in cur.fetchall()]
 
-    # Get all ladder players with rankings
+    # Get active ladder players with rankings
     cur.execute(f'''
         SELECT lp.*, u.username, u.email, u.phone, u.ntrp_rating, u.google_id
         FROM ladder_players lp
         JOIN users u ON lp.user_id = u.id
-        WHERE lp.ladder_id = {ph}
+        WHERE lp.ladder_id = {ph} AND lp.pending = {ph}
         ORDER BY lp.ranking ASC
-    ''', (ladder_id,))
+    ''', (ladder_id, False if USE_POSTGRES else 0))
     ladder_players = [dict(r) for r in cur.fetchall()]
+
+    # Get pending players
+    cur.execute(f'''
+        SELECT lp.*, u.username, u.email, u.phone, u.ntrp_rating, u.google_id
+        FROM ladder_players lp
+        JOIN users u ON lp.user_id = u.id
+        WHERE lp.ladder_id = {ph} AND lp.pending = {ph}
+        ORDER BY u.ntrp_rating DESC, lp.joined_at ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1))
+    pending_players = [dict(r) for r in cur.fetchall()]
 
     # Get current groups
     cur.execute(f'''
@@ -2314,6 +2324,7 @@ def admin():
     all_ladders = get_all_ladders()
     ladder_name = get_ladder_name(ladder_id)
     return render_template('admin.html', all_users=all_users, ladder_players=ladder_players,
+                           pending_players=pending_players,
                            groups=groups, month=month, year=year, disputed_count=disputed_count,
                            all_ladders=all_ladders, ladder_name=ladder_name,
                            current_ladder_id=ladder_id)
