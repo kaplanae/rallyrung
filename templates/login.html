@@ -121,6 +121,18 @@
             <button type="submit" class="auth-submit">Sign In</button>
         </form>
 
+        <div id="forgot-link" style="text-align:center; margin-top:12px;">
+            <a href="#" onclick="document.getElementById('forgot-link').style.display='none'; document.getElementById('forgot-section').style.display='block'; return false;" style="font-size:0.85rem; color:var(--text-muted);">Forgot password?</a>
+        </div>
+        <div id="forgot-section" style="display:none; margin-top:12px;">
+            <form method="POST" action="{{ url_for('forgot_password') }}">
+                <div class="form-group" style="margin-bottom:10px;">
+                    <input type="email" name="email" placeholder="Enter your email" required style="width:100%;padding:10px 12px;background:var(--bg-body,var(--bg));border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:0.95rem;box-sizing:border-box;">
+                </div>
+                <button type="submit" class="auth-submit" style="background:var(--bg-card);color:var(--text);border:1px solid var(--border);">Send Reset Link</button>
+            </form>
+        </div>
+
         <div class="divider"><span>or</span></div>
 
         <a href="{{ url_for('google_login') }}" class="google-btn">

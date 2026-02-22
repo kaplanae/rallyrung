@@ -14,6 +14,9 @@
         <header>
             <nav>
                 <a href="{{ url_for('index') }}" class="logo">Rally<span class="logo-accent">Rung</span></a>
+                <button class="hamburger" onclick="document.querySelector('nav').classList.toggle('nav-open')" aria-label="Menu">
+                    <span></span><span></span><span></span>
+                </button>
                 <div class="nav-links">
                     <a href="{{ url_for('ladder') }}">Ladder</a>
                     <a href="{{ url_for('rules') }}">Rules</a>

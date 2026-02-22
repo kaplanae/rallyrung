@@ -1091,6 +1091,130 @@ def signup():
     return redirect(url_for('profile'))
 
 
+@app.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    email = request.form.get('email', '').strip().lower()
+    # Always show the same message to avoid email enumeration
+    success_msg = 'If an account exists with that email, a password reset link has been sent.'
+
+    if not email:
+        flash('Please enter your email address.')
+        return redirect(url_for('login'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT id, email FROM users WHERE email = {ph}', (email,))
+    user_row = cur.fetchone()
+
+    if user_row:
+        user_row = dict(user_row)
+        token = str(uuid.uuid4())
+        expires_at = datetime.utcnow() + timedelta(hours=1)
+
+        cur.execute(f'''
+            INSERT INTO magic_tokens (email, token, expires_at)
+            VALUES ({ph}, {ph}, {ph})
+        ''', (email, token, expires_at))
+        conn.commit()
+
+        link = url_for('reset_password', token=token, _external=True)
+        send_email(email, "Reset your RallyRung password", email_wrap(f'''
+            <p>We received a request to reset your password.</p>
+            <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#2ecc71;color:#000;
+            border-radius:6px;font-weight:600;text-decoration:none;">Reset Password</a></p>
+            <p style="color:#999;font-size:13px;">This link expires in 1 hour. If you didn't request this, you can ignore this email.</p>
+        '''))
+
+    conn.close()
+    flash(success_msg)
+    return redirect(url_for('login'))
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT * FROM magic_tokens WHERE token = {ph}', (token,))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        flash('Invalid reset link.')
+        return redirect(url_for('login'))
+
+    row = dict(row)
+    if row.get('used'):
+        conn.close()
+        flash('This reset link has already been used.')
+        return redirect(url_for('login'))
+
+    if datetime.utcnow() > row['expires_at']:
+        conn.close()
+        flash('This reset link has expired.')
+        return redirect(url_for('login'))
+
+    if request.method == 'GET':
+        conn.close()
+        return render_template('reset_password.html', token=token)
+
+    # POST — set new password
+    password = request.form.get('password', '')
+    confirm_password = request.form.get('confirm_password', '')
+
+    if not password or not confirm_password:
+        conn.close()
+        flash('Both password fields are required.')
+        return redirect(url_for('reset_password', token=token))
+
+    if password != confirm_password:
+        conn.close()
+        flash('Passwords do not match.')
+        return redirect(url_for('reset_password', token=token))
+
+    if len(password) < 6:
+        conn.close()
+        flash('Password must be at least 6 characters.')
+        return redirect(url_for('reset_password', token=token))
+
+    hashed = generate_password_hash(password)
+    cur.execute(f'UPDATE users SET password_hash = {ph} WHERE email = {ph}', (hashed, row['email']))
+
+    # Mark token as used
+    if USE_POSTGRES:
+        cur.execute(f'UPDATE magic_tokens SET used = TRUE WHERE id = {ph}', (row['id'],))
+    else:
+        cur.execute(f'UPDATE magic_tokens SET used = 1 WHERE id = {ph}', (row['id'],))
+
+    conn.commit()
+
+    # Log the user in
+    cur.execute(f'SELECT * FROM users WHERE email = {ph}', (row['email'],))
+    user_row = cur.fetchone()
+    conn.close()
+
+    if user_row:
+        user_row = dict(user_row)
+        user = User(
+            id=user_row['id'], username=user_row['username'],
+            email=user_row.get('email'), google_id=user_row.get('google_id'),
+            profile_picture=user_row.get('profile_picture'),
+            phone=user_row.get('phone'), ntrp_rating=user_row.get('ntrp_rating'),
+            gender=user_row.get('gender'),
+            is_admin=bool(user_row.get('is_admin')),
+            is_active=bool(user_row.get('is_active', True))
+        )
+        login_user(user)
+        flash('Your password has been reset successfully.')
+        return redirect(url_for('ladder'))
+
+    flash('Password reset. Please sign in.')
+    return redirect(url_for('login'))
+
+
 @app.route('/auth/google')
 def google_login():
     if not google:
@@ -1945,6 +2069,18 @@ def ladder_unpause():
     cur = conn.cursor()
     ph = get_placeholder()
 
+    # Check if player is pending (not yet placed) — don't allow self-activation
+    cur.execute(f'SELECT pending, ranking FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
+                (current_user.id, ladder_id))
+    row = cur.fetchone()
+    if row:
+        row = dict(row)
+        is_pending = row['pending'] if USE_POSTGRES else row['pending'] == 1
+        if is_pending:
+            conn.close()
+            flash('Your signup is pending — you\'ll be placed on the ladder at the next monthly reset.')
+            return redirect(url_for('profile'))
+
     if USE_POSTGRES:
         cur.execute(f'UPDATE ladder_players SET is_active = TRUE WHERE user_id = {ph} AND ladder_id = {ph}',
                     (current_user.id, ladder_id))
@@ -2390,7 +2526,7 @@ def admin():
     # Mark users/players who have logged in (via Google OR magic link)
     for u in all_users:
         u['has_logged_in'] = bool(u.get('google_id')) or (u.get('email') in magic_logged_in_emails)
-        u['ladder_status'] = ladder_status.get(u['id'], 'not on ladder')
+        u['ladder_status'] = ladder_status.get(u['id'], 'inactive')
     for lp in ladder_players:
         lp['has_logged_in'] = bool(lp.get('google_id')) or (lp.get('email') in magic_logged_in_emails)
 
@@ -2459,12 +2595,17 @@ def admin_add_to_ladder():
     ph = get_placeholder()
 
     # Check if already on ladder
-    cur.execute(f'SELECT id FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
+    cur.execute(f'SELECT id, pending, is_active FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
                 (user_id, ladder_id))
-    if cur.fetchone():
-        flash('Player is already on the ladder.')
-        conn.close()
-        return redirect(url_for('admin'))
+    existing = cur.fetchone()
+    if existing:
+        existing = dict(existing)
+        is_pending = existing['pending'] if USE_POSTGRES else existing['pending'] == 1
+        is_active = existing['is_active'] if USE_POSTGRES else existing['is_active'] == 1
+        if is_active and not is_pending:
+            flash('Player is already active on the ladder.')
+            conn.close()
+            return redirect(url_for('admin'))
 
     # Shift rankings down for players at or below this ranking
     cur.execute(f'''
@@ -2472,10 +2613,17 @@ def admin_add_to_ladder():
         WHERE ladder_id = {ph} AND ranking >= {ph}
     ''', (ladder_id, ranking))
 
-    cur.execute(f'''
-        INSERT INTO ladder_players (user_id, ladder_id, ranking)
-        VALUES ({ph}, {ph}, {ph})
-    ''', (user_id, ladder_id, ranking))
+    if existing:
+        # Activate the pending/inactive row with the correct ranking
+        cur.execute(f'''
+            UPDATE ladder_players SET ranking = {ph}, is_active = {ph}, pending = {ph}
+            WHERE id = {ph}
+        ''', (ranking, True if USE_POSTGRES else 1, False if USE_POSTGRES else 0, existing['id']))
+    else:
+        cur.execute(f'''
+            INSERT INTO ladder_players (user_id, ladder_id, ranking)
+            VALUES ({ph}, {ph}, {ph})
+        ''', (user_id, ladder_id, ranking))
     conn.commit()
 
     # Send welcome email
@@ -3104,13 +3252,16 @@ def admin_import_csv():
 
         # Add to ladder if ranking provided and not already on ladder
         if ranking:
+            rank_int = int(ranking)
+            if rank_int < 1:
+                rank_int = 1
             cur.execute(f'SELECT id FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
                         (user_id, ladder_id))
             if not cur.fetchone():
                 cur.execute(f'''
                     INSERT INTO ladder_players (user_id, ladder_id, ranking)
                     VALUES ({ph}, {ph}, {ph})
-                ''', (user_id, ladder_id, int(ranking)))
+                ''', (user_id, ladder_id, rank_int))
                 added += 1
             else:
                 skipped += 1
