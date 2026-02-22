@@ -36,23 +36,6 @@
     </form>
 </div>
 
-<!-- Current Groups -->
-{% if groups %}
-<div class="admin-section">
-    <h2>Current Groups ({{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month] }} {{ year }})</h2>
-    {% for g in groups %}
-    <div class="group-card">
-        <h3>Group {{ g.group_number }}</h3>
-        <div class="group-players">
-            <span class="group-player">{{ g.p1_name or "—" }}</span>
-            <span class="group-player">{{ g.p2_name or "—" }}</span>
-            {% if g.p3_name %}<span class="group-player">{{ g.p3_name }}</span>{% endif %}
-        </div>
-    </div>
-    {% endfor %}
-</div>
-{% endif %}
-
 <!-- Ladder Players -->
 <div class="admin-section">
     <h2>{{ ladder_name }} Rankings</h2>
