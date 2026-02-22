@@ -19,6 +19,8 @@ load_dotenv()
 
 resend.api_key = os.environ.get('RESEND_API_KEY')
 
+ADMIN_EMAILS = ['kaplanae@gmail.com', 'tenniscedarpark@gmail.com']
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'rallyrung-dev-secret-key-change-in-production')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
@@ -1844,6 +1846,13 @@ def ladder_join():
 <p>You'll be added to the ladder at the beginning of <strong>{next_month_name}</strong>. We'll email you when you're placed.</p>''',
                 f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
 
+    # Notify admins
+    send_email(ADMIN_EMAILS, f"New player signed up: {current_user.username}",
+        email_wrap(f'''<p><strong>{current_user.username}</strong> signed up for the {ladder_name} ladder.</p>
+<p>NTRP: {ntrp_rating} &middot; Email: {cur_user_email or 'none'} &middot; Phone: {phone or 'none'}</p>
+<p>They'll be added at the next monthly reset ({next_month_name}).</p>''',
+            f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+
     return redirect(url_for('profile'))
 
 
@@ -1891,7 +1900,13 @@ def ladder_pause():
                     (current_user.id, ladder_id))
     conn.commit()
     conn.close()
+    ladder_name = get_ladder_name(ladder_id)
     flash('Your ladder participation is paused. You keep your ranking but won\'t be placed in groups.')
+
+    send_email(ADMIN_EMAILS, f"Player paused: {current_user.username}",
+        email_wrap(f'''<p><strong>{current_user.username}</strong> has paused their participation on the {ladder_name} ladder.</p>''',
+            f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+
     return redirect(url_for('profile'))
 
 
@@ -1911,7 +1926,13 @@ def ladder_unpause():
                     (current_user.id, ladder_id))
     conn.commit()
     conn.close()
+    ladder_name = get_ladder_name(ladder_id)
     flash('Welcome back! You are active on the ladder again.')
+
+    send_email(ADMIN_EMAILS, f"Player unpaused: {current_user.username}",
+        email_wrap(f'''<p><strong>{current_user.username}</strong> has rejoined the {ladder_name} ladder.</p>''',
+            f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+
     return redirect(url_for('profile'))
 
 
