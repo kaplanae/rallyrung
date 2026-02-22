@@ -2345,9 +2345,25 @@ def admin():
     cur.execute("SELECT DISTINCT email FROM magic_tokens WHERE used = TRUE")
     magic_logged_in_emails = {row['email'] for row in cur.fetchall()}
 
+    # Build ladder status lookup for all users
+    cur.execute(f'''
+        SELECT user_id, is_active, pending, ranking FROM ladder_players
+        WHERE ladder_id = {ph}
+    ''', (ladder_id,))
+    ladder_status = {}
+    for row in cur.fetchall():
+        r = dict(row)
+        if r['pending'] if USE_POSTGRES else r['pending'] == 1:
+            ladder_status[r['user_id']] = 'pending'
+        elif r['is_active'] if USE_POSTGRES else r['is_active'] == 1:
+            ladder_status[r['user_id']] = f"active (#{r['ranking']})"
+        else:
+            ladder_status[r['user_id']] = 'paused'
+
     # Mark users/players who have logged in (via Google OR magic link)
     for u in all_users:
         u['has_logged_in'] = bool(u.get('google_id')) or (u.get('email') in magic_logged_in_emails)
+        u['ladder_status'] = ladder_status.get(u['id'], 'not on ladder')
     for lp in ladder_players:
         lp['has_logged_in'] = bool(lp.get('google_id')) or (lp.get('email') in magic_logged_in_emails)
 

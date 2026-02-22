@@ -197,10 +197,14 @@
                 </td>
                 <td style="font-size: 0.8rem; color: var(--text-muted);">{{ u.email or "—" }}</td>
                 <td>
-                    {% if u.is_active %}
-                        <span class="badge badge-active">active</span>
+                    {% if 'active' in u.ladder_status %}
+                        <span class="badge badge-active">{{ u.ladder_status }}</span>
+                    {% elif u.ladder_status == 'pending' %}
+                        <span class="badge" style="background: rgba(241, 196, 15, 0.15); color: #f1c40f;">pending</span>
+                    {% elif u.ladder_status == 'paused' %}
+                        <span class="badge badge-inactive">paused</span>
                     {% else %}
-                        <span class="badge badge-inactive">inactive</span>
+                        <span class="badge badge-inactive">not on ladder</span>
                     {% endif %}
                 </td>
                 <td style="display: flex; gap: 4px; flex-wrap: wrap;">
