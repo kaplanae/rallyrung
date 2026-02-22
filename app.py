@@ -19,7 +19,7 @@ load_dotenv()
 
 resend.api_key = os.environ.get('RESEND_API_KEY')
 
-ADMIN_EMAILS = ['kaplanae@gmail.com', 'tenniscedarpark@gmail.com']
+ADMIN_EMAILS = ['kaplanae@gmail.com']
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'rallyrung-dev-secret-key-change-in-production')
