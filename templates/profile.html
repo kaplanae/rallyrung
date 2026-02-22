@@ -83,10 +83,6 @@
                 <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
                 <span style="color: var(--accent); font-size: 0.9rem;">Signed up — you'll be placed on the {{ ladder_name }} ladder next month</span>
             </div>
-            <form method="POST" action="{{ url_for('ladder_leave') }}" style="margin-top: 12px;"
-                  onsubmit="return confirm('Cancel your ladder signup?');">
-                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Cancel Signup</button>
-            </form>
         {% else %}
             <div style="display: flex; gap: 10px; align-items: center;">
                 <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
@@ -96,7 +92,12 @@
             </div>
         {% endif %}
     </form>
-    {% if ladder_player and ladder_player.is_active and not ladder_player.pending %}
+    {% if ladder_player and ladder_player.pending %}
+        <form method="POST" action="{{ url_for('ladder_leave') }}" style="margin-top: 12px;"
+              onsubmit="return confirm('Cancel your ladder signup?');">
+            <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Cancel Signup</button>
+        </form>
+    {% elif ladder_player and ladder_player.is_active and not ladder_player.pending %}
         <form method="POST" action="{{ url_for('ladder_pause') }}" style="margin-top: 12px;">
             <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Temporarily Leave Ladder</button>
         </form>
