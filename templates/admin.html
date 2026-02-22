@@ -69,11 +69,16 @@
                 <td style="font-size: 0.8rem; color: var(--text-muted);">{{ lp.email or "—" }}</td>
                 <td style="font-size: 0.8rem;">{{ lp.phone or "—" }}</td>
                 <td>{{ lp.ntrp_rating or "—" }}</td>
-                <td>
-                    <form method="POST" action="{{ url_for('admin_remove_from_ladder') }}" class="inline-form"
-                          onsubmit="return confirm('Remove {{ lp.username }} from the ladder?')">
+                <td style="display: flex; gap: 4px; flex-wrap: wrap;">
+                    <form method="POST" action="{{ url_for('admin_pause_player') }}" class="inline-form"
+                          onsubmit="return confirm('Pause {{ lp.username }}? They will be removed from active play but keep their info.')">
                         <input type="hidden" name="user_id" value="{{ lp.user_id }}">
-                        <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                        <button type="submit" class="btn btn-secondary btn-sm">Pause</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_remove_from_ladder') }}" class="inline-form"
+                          onsubmit="return confirm('Remove {{ lp.username }} entirely from the ladder?')">
+                        <input type="hidden" name="user_id" value="{{ lp.user_id }}">
+                        <button type="submit" class="btn btn-sm" style="background: #e74c3c; color: #fff;">Remove</button>
                     </form>
                 </td>
             </tr>
@@ -114,6 +119,46 @@
                           onsubmit="return confirm('Remove {{ pp.username }} from pending?')">
                         <input type="hidden" name="user_id" value="{{ pp.user_id }}">
                         <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Paused Players -->
+{% if paused_players %}
+<div class="admin-section">
+    <h2>Paused Players ({{ paused_players|length }})</h2>
+    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">These players are paused — not in active play but their info is preserved.</p>
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>NTRP</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pp in paused_players %}
+            <tr>
+                <td>{{ pp.username }}</td>
+                <td style="font-size: 0.8rem; color: var(--text-muted);">{{ pp.email or "—" }}</td>
+                <td style="font-size: 0.8rem;">{{ pp.phone or "—" }}</td>
+                <td>{{ pp.ntrp_rating or "—" }}</td>
+                <td style="display: flex; gap: 4px; flex-wrap: wrap;">
+                    <form method="POST" action="{{ url_for('admin_pause_player') }}" class="inline-form">
+                        <input type="hidden" name="user_id" value="{{ pp.user_id }}">
+                        <button type="submit" class="btn btn-primary btn-sm">Unpause</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin_remove_from_ladder') }}" class="inline-form"
+                          onsubmit="return confirm('Remove {{ pp.username }} entirely?')">
+                        <input type="hidden" name="user_id" value="{{ pp.user_id }}">
+                        <button type="submit" class="btn btn-sm" style="background: #e74c3c; color: #fff;">Remove</button>
                     </form>
                 </td>
             </tr>

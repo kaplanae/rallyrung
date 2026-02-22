@@ -2279,10 +2279,20 @@ def admin():
         SELECT lp.*, u.username, u.email, u.phone, u.ntrp_rating, u.google_id
         FROM ladder_players lp
         JOIN users u ON lp.user_id = u.id
-        WHERE lp.ladder_id = {ph} AND lp.pending = {ph}
+        WHERE lp.ladder_id = {ph} AND lp.pending = {ph} AND lp.is_active = {ph}
         ORDER BY lp.ranking ASC
-    ''', (ladder_id, False if USE_POSTGRES else 0))
+    ''', (ladder_id, False if USE_POSTGRES else 0, True if USE_POSTGRES else 1))
     ladder_players = [dict(r) for r in cur.fetchall()]
+
+    # Get paused players
+    cur.execute(f'''
+        SELECT lp.*, u.username, u.email, u.phone, u.ntrp_rating, u.google_id
+        FROM ladder_players lp
+        JOIN users u ON lp.user_id = u.id
+        WHERE lp.ladder_id = {ph} AND lp.pending = {ph} AND lp.is_active = {ph}
+        ORDER BY lp.ranking ASC
+    ''', (ladder_id, False if USE_POSTGRES else 0, False if USE_POSTGRES else 0))
+    paused_players = [dict(r) for r in cur.fetchall()]
 
     # Get pending players
     cur.execute(f'''
@@ -2324,7 +2334,7 @@ def admin():
     all_ladders = get_all_ladders()
     ladder_name = get_ladder_name(ladder_id)
     return render_template('admin.html', all_users=all_users, ladder_players=ladder_players,
-                           pending_players=pending_players,
+                           pending_players=pending_players, paused_players=paused_players,
                            groups=groups, month=month, year=year, disputed_count=disputed_count,
                            all_ladders=all_ladders, ladder_name=ladder_name,
                            current_ladder_id=ladder_id)
@@ -2453,6 +2463,51 @@ def admin_remove_from_ladder():
         ''', (ladder_id, old_ranking))
         conn.commit()
         flash('Player removed from ladder.')
+    else:
+        flash('Player not found on ladder.')
+
+    conn.close()
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/pause-player', methods=['POST'])
+@login_required
+@require_admin
+def admin_pause_player():
+    user_id = int(request.form.get('user_id', 0))
+    ladder_id = get_ladder_id()
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT ranking, is_active FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
+                (user_id, ladder_id))
+    row = cur.fetchone()
+    if row:
+        row = dict(row)
+        if row['is_active'] if USE_POSTGRES else row['is_active'] == 1:
+            old_ranking = row['ranking']
+            cur.execute(f'UPDATE ladder_players SET is_active = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
+                        (False if USE_POSTGRES else 0, user_id, ladder_id))
+            # Close the gap in rankings
+            cur.execute(f'''
+                UPDATE ladder_players SET ranking = ranking - 1
+                WHERE ladder_id = {ph} AND ranking > {ph} AND is_active = {ph}
+            ''', (ladder_id, old_ranking, True if USE_POSTGRES else 1))
+            conn.commit()
+            flash('Player paused — removed from active ladder but info preserved.')
+        else:
+            # Unpause — add back at bottom
+            cur.execute(f'''
+                SELECT COALESCE(MAX(ranking), 0) as max_rank FROM ladder_players
+                WHERE ladder_id = {ph} AND is_active = {ph}
+            ''', (ladder_id, True if USE_POSTGRES else 1))
+            max_rank = dict(cur.fetchone())['max_rank']
+            cur.execute(f'UPDATE ladder_players SET is_active = {ph}, ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
+                        (True if USE_POSTGRES else 1, max_rank + 1, user_id, ladder_id))
+            conn.commit()
+            flash(f'Player unpaused — placed at rank #{max_rank + 1}.')
     else:
         flash('Player not found on ladder.')
 
