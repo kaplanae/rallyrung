@@ -7,7 +7,8 @@ import sqlite3
 import json
 import csv
 import io
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+from zoneinfo import ZoneInfo
 from calendar import monthrange
 from collections import defaultdict
 import os
@@ -24,6 +25,17 @@ ADMIN_EMAILS = ['kaplanae@gmail.com']
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'rallyrung-dev-secret-key-change-in-production')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+CENTRAL_TZ = ZoneInfo('America/Chicago')
+
+@app.template_filter('to_central')
+def to_central_filter(dt):
+    """Convert a UTC datetime to US Central time."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(CENTRAL_TZ)
 
 # Flask-Login setup
 login_manager = LoginManager()

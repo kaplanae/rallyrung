@@ -113,7 +113,7 @@
                 <td style="font-size: 0.8rem; color: var(--text-muted);">{{ pp.email or "—" }}</td>
                 <td style="font-size: 0.8rem;">{{ pp.phone or "—" }}</td>
                 <td>{{ pp.ntrp_rating or "—" }}</td>
-                <td style="font-size: 0.8rem; color: var(--text-muted);">{{ pp.joined_at.strftime('%b %d') if pp.joined_at else "—" }}</td>
+                <td style="font-size: 0.8rem; color: var(--text-muted);">{{ (pp.joined_at|to_central).strftime('%b %d') if pp.joined_at else "—" }}</td>
                 <td style="display: flex; gap: 4px; flex-wrap: wrap;">
                     <form method="POST" action="{{ url_for('admin_remove_from_ladder') }}" class="inline-form"
                           onsubmit="return confirm('Remove {{ pp.username }} from pending?')">
