@@ -11,7 +11,7 @@
         <div class="meta">
             {{ current_user.email }}
             {% if current_user.age %} &middot; Age {{ current_user.age }}{% endif %}
-            {% if current_user.ntrp_rating %} &middot; NTRP {{ current_user.ntrp_rating }}{% endif %}
+            {% if current_user.ntrp_rating %} &middot; Rating {{ current_user.ntrp_rating }}{% endif %}
             {% if current_user.phone %} &middot; {{ current_user.phone }}{% endif %}
         </div>
     </div>
@@ -55,31 +55,36 @@
             {% endif %}
             <input type="file" name="profile_picture" accept=".jpg,.jpeg,.png,.gif,.webp" id="pic-input" style="display: none;">
             <button type="button" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem; padding: 4px 10px;" onclick="document.getElementById('pic-input').click();">
-                {{ 'Change' if current_user.profile_picture else 'Upload' }}
+                {{ 'Change Picture' if current_user.profile_picture else 'Upload Picture' }}
             </button>
             <span id="pic-filename" style="font-size: 0.8rem; color: var(--text-muted);"></span>
         </div>
         <div class="form-row">
             <div class="form-group" style="flex: 2;">
                 <label>Email</label>
-                <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="you@example.com">
+                <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="you@example.com" required>
             </div>
             <div class="form-group" style="flex: 1;">
                 <label>Phone</label>
-                <input type="tel" name="phone" id="phone-input" value="{{ current_user.phone or '' }}" placeholder="(555) 123-4567">
+                <input type="tel" name="phone" id="phone-input" value="{{ current_user.phone or '' }}" placeholder="(555) 123-4567" required>
             </div>
-            <div class="form-group" style="flex: 0 0 90px;">
-                <label>NTRP</label>
-                <select name="ntrp_rating" id="ntrp-select">
-                    <option value="">—</option>
-                    {% for r in ['2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5'] %}
+        </div>
+        <div class="form-row">
+            <div class="form-group" style="flex: 1;">
+                <label>Tennis Rating</label>
+                <select name="ntrp_rating" id="ntrp-select" required>
+                    <option value="">Select rating...</option>
+                    <option value="" disabled style="font-style: italic; color: var(--text-muted);">─────────────</option>
+                    <option value="help" id="rating-help-opt" style="font-style: italic;">I'm not sure / What is this?</option>
+                    <option value="" disabled style="font-style: italic; color: var(--text-muted);">─────────────</option>
+                    {% for r in ['2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '6.0', '6.5', '7.0'] %}
                         <option value="{{ r }}" {{ 'selected' if current_user.ntrp_rating == r }}>{{ r }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="form-group" style="flex: 0 0 110px;">
                 <label>Birth Year</label>
-                <select name="birth_year" id="birth-year-select">
+                <select name="birth_year" id="birth-year-select" required>
                     <option value="">—</option>
                 </select>
                 <script>
@@ -97,15 +102,44 @@
                 </script>
             </div>
         </div>
+
+        <!-- Rating help box (hidden by default) -->
+        <div id="rating-help-box" style="display: none; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 16px; font-size: 0.85rem; line-height: 1.7;">
+            <p style="font-weight: 600; margin-bottom: 8px; color: var(--accent);">Tennis Rating Guide (NTRP)</p>
+            <ul style="padding-left: 18px; color: var(--text-muted);">
+                <li><strong>2.0</strong> — Beginner. Just learning the game.</li>
+                <li><strong>2.5</strong> — Can sustain a short rally of slow pace.</li>
+                <li><strong>3.0</strong> — Consistent on medium-paced shots, developing placement.</li>
+                <li><strong>3.5</strong> — Improved stroke dependability, directional control, developing variety.</li>
+                <li><strong>4.0</strong> — Dependable strokes, can hit with depth and variety, solid serve.</li>
+                <li><strong>4.5</strong> — Good shot anticipation, uses power and spins, strong first serve.</li>
+                <li><strong>5.0</strong> — Advanced. Has developed power and consistency as a major weapon.</li>
+                <li><strong>5.5</strong> — Highly advanced. Can vary strategies and styles, strong tournament player.</li>
+                <li><strong>6.0+</strong> — National/professional level.</li>
+            </ul>
+            <p style="margin-top: 8px;">Most recreational players are between <strong>3.0</strong> and <strong>4.5</strong>. If you've never been rated, pick the level that sounds closest to your game.</p>
+            <a href="#" onclick="document.getElementById('rating-help-box').style.display='none'; return false;" style="font-size: 0.8rem;">Close</a>
+        </div>
+
         {% if not ladder_player %}
-            <input type="hidden" name="ladder_id" value="{{ current_ladder_id }}">
-            <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">You are not yet on the {{ ladder_name }} ladder. Fill in your details and click "Join Ladder" to start competing.</p>
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label>Select a Ladder</label>
+                <select name="ladder_id" id="ladder-select" required>
+                    <option value="">Choose a ladder...</option>
+                    {% for l in all_ladders %}
+                        <option value="{{ l.id }}">{{ l.name }} {{ l.ladder_type|default('Singles', true)|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">You are not yet on a ladder. Fill in your details and click "Save & Join Ladder" to select a ladder to join.</p>
             <div style="display: flex; gap: 10px;">
-                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">Save Profile Only</button>
-                <button type="button" class="btn btn-primary btn-sm" onclick="
-                    var rating = document.getElementById('ntrp-select').value;
-                    if (!rating) { alert('Please select an NTRP rating to join the ladder.'); return; }
+                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);" onclick="
+                    document.getElementById('ladder-select').removeAttribute('required');
+                ">Save Profile Only</button>
+                <button type="button" class="btn btn-primary btn-sm" id="join-btn" onclick="
+                    document.getElementById('ladder-select').setAttribute('required', 'required');
                     var form = document.getElementById('profile-form');
+                    if (!form.checkValidity()) { form.reportValidity(); return; }
                     form.action = '{{ url_for('ladder_join') }}';
                     form.submit();
                 ">Save &amp; Join Ladder</button>
@@ -216,6 +250,17 @@
     if (picInput) {
         picInput.addEventListener('change', function() {
             picLabel.textContent = this.files[0] ? this.files[0].name : '';
+        });
+    }
+
+    // Rating help toggle
+    var ntrpSelect = document.getElementById('ntrp-select');
+    if (ntrpSelect) {
+        ntrpSelect.addEventListener('change', function() {
+            if (this.value === 'help') {
+                document.getElementById('rating-help-box').style.display = 'block';
+                this.value = '';
+            }
         });
     }
 
