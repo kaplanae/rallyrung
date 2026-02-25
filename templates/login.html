@@ -169,18 +169,9 @@
                 <label for="signup-confirm">Confirm Password</label>
                 <input type="password" id="signup-confirm" name="confirm_password" minlength="6" required>
             </div>
-            <div class="form-group">
-                <label for="signup-birth-year">Birth Year</label>
-                <select id="signup-birth-year" name="birth_year" required>
-                    <option value="">Select year...</option>
-                    <script>
-                        var sel = document.currentScript.parentElement;
-                        var y = new Date().getFullYear();
-                        for (var i = y - 18; i >= y - 90; i--) {
-                            sel.innerHTML += '<option value="' + i + '">' + i + '</option>';
-                        }
-                    </script>
-                </select>
+            <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="signup-over18" name="over_18" value="yes" required style="width: auto; margin: 0;">
+                <label for="signup-over18" style="margin: 0; cursor: pointer;">I confirm I am 18 years of age or older</label>
             </div>
             <button type="submit" class="auth-submit">Create Account</button>
         </form>

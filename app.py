@@ -191,17 +191,11 @@ class User(UserMixin):
         self.is_admin = is_admin
         self._is_active = is_active
         self.password_hash = password_hash
-        self.birth_year = birth_year
+        self.birth_year = birth_year  # kept for DB compat, not displayed
 
     @property
     def is_active(self):
         return self._is_active
-
-    @property
-    def age(self):
-        if not self.birth_year:
-            return None
-        return date.today().year - self.birth_year
 
 
 @login_manager.user_loader
@@ -1130,21 +1124,14 @@ def signup():
     email = request.form.get('email', '').strip().lower()
     password = request.form.get('password', '')
     confirm_password = request.form.get('confirm_password', '')
-    birth_year_str = request.form.get('birth_year', '').strip()
+    over_18 = request.form.get('over_18')
 
-    if not username or not email or not password or not confirm_password or not birth_year_str:
+    if not username or not email or not password or not confirm_password:
         flash('All fields are required.')
         return redirect(url_for('login'))
 
-    try:
-        birth_year = int(birth_year_str)
-    except ValueError:
-        flash('Please select a valid birth year.')
-        return redirect(url_for('login'))
-
-    current_year = date.today().year
-    if current_year - birth_year < 18:
-        flash('You must be at least 18 years old to join.')
+    if not over_18:
+        flash('You must confirm you are at least 18 years old to join.')
         return redirect(url_for('login'))
 
     if password != confirm_password:
@@ -1166,8 +1153,8 @@ def signup():
         return redirect(url_for('login'))
 
     hashed = generate_password_hash(password)
-    cur.execute(f'''INSERT INTO users (username, email, password_hash, birth_year)
-        VALUES ({ph}, {ph}, {ph}, {ph})''', (username, email, hashed, birth_year))
+    cur.execute(f'''INSERT INTO users (username, email, password_hash)
+        VALUES ({ph}, {ph}, {ph})''', (username, email, hashed))
     conn.commit()
 
     cur.execute(f'SELECT * FROM users WHERE email = {ph}', (email,))
@@ -2172,7 +2159,7 @@ def profile():
 def ladder_join():
     ntrp_rating = request.form.get('ntrp_rating', '').strip()
     if not ntrp_rating:
-        flash('Please select an NTRP rating.')
+        flash('Please select a tennis rating.')
         return redirect(url_for('profile'))
 
     # Use form-specified ladder_id, or fall back to current active ladder
@@ -2347,14 +2334,6 @@ def edit_profile():
     email = request.form.get('email', '').strip()
     phone = request.form.get('phone', '').strip()
     ntrp = request.form.get('ntrp_rating', '').strip()
-    birth_year_str = request.form.get('birth_year', '').strip()
-    birth_year = None
-    if birth_year_str:
-        try:
-            birth_year = int(birth_year_str)
-        except ValueError:
-            pass
-
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
@@ -2372,8 +2351,8 @@ def edit_profile():
         else:
             flash('Invalid file type. Use JPG, PNG, GIF, or WEBP.')
 
-    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph}, birth_year = {ph} WHERE id = {ph}',
-                (email, phone, ntrp, birth_year, current_user.id))
+    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
+                (email, phone, ntrp, current_user.id))
     conn.commit()
     conn.close()
     flash('Profile updated.')
