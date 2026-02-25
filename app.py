@@ -45,7 +45,7 @@ BRANDS = {
         'APP_NAME': 'Texas Tennis Ladder',
         'APP_DOMAIN': 'texastennisladder.com',
         'APP_TAGLINE': 'Competitive Tennis Ladders Across Texas',
-        'APP_LOGO_LEFT': 'Texas Tennis',
+        'APP_LOGO_LEFT': 'TX Tennis ',
         'APP_LOGO_RIGHT': 'Ladder',
         'EMAIL_FROM': 'Texas Tennis Ladder <noreply@texastennisladder.com>',
         'IS_HUB': True,

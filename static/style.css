@@ -69,11 +69,12 @@ nav {
 
 .nav-links {
     display: flex;
+    align-items: center;
     gap: 16px;
     flex: 1;
 }
 
-.nav-links a {
+.nav-links a, .nav-links .nav-dropdown-toggle {
     color: var(--text-muted);
     font-size: 0.9rem;
     font-weight: 500;
@@ -81,7 +82,7 @@ nav {
     transition: color 0.2s;
 }
 
-.nav-links a:hover, .nav-links a.active { color: var(--accent); }
+.nav-links a:hover, .nav-links a.active, .nav-links .nav-dropdown-toggle:hover { color: var(--accent); }
 
 .auth-section {
     display: flex;
@@ -792,6 +793,14 @@ footer {
     height: 1px;
     background: var(--border);
     margin: 4px 0;
+}
+
+.nav-dropdown-coming-soon {
+    display: block;
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 /* ============ HUB LADDER GRID ============ */
