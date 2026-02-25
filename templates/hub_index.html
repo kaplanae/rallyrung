@@ -5,6 +5,10 @@
 <div class="hub-hero">
     <h1>Texas Tennis <span class="accent">Ladder</span></h1>
     <p>Welcome to Texas Tennis Ladder, where our goal is to promote the game of tennis by setting up tennis ladders and matches in as many cities in Texas as we can.</p>
+    <p style="margin-top: 8px;">Our tennis ladders are a way for local tennis players 18 and over to meet and play matches on their own schedules, without having to make any commitments to play regularly scheduled matches.</p>
+    {% if not current_user.is_authenticated %}
+    <a href="{{ url_for('login') }}" class="btn btn-primary" style="margin-top: 16px;">Create My Profile Now</a>
+    {% endif %}
 </div>
 
 <div class="hub-steps">
@@ -13,6 +17,20 @@
     <div class="hub-step"><span class="hub-step-num">3</span> Play Matches</div>
     <div class="hub-step"><span class="hub-step-num">4</span> Climb the Ladder</div>
 </div>
+
+{% if recent_matches %}
+<div class="hub-ticker-wrap">
+    <div class="hub-ticker" id="hub-ticker">
+        {% for m in recent_matches %}
+        <div class="hub-ticker-item">
+            <span class="hub-ticker-ladder">{{ m.ladder_name }}</span>
+            <span class="hub-ticker-players">{{ m.p1_name }} vs {{ m.p2_name }}</span>
+            <span class="hub-ticker-score">{{ m.score }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <h2 class="section-title" style="text-align: center;">Available Ladders</h2>
 
@@ -38,4 +56,24 @@
 <div style="text-align: center; margin-top: 24px;">
     <a href="{{ url_for('request_ladder') }}" style="color: var(--text-muted); font-size: 0.85rem;">Don't see your city? <span style="color: var(--accent);">Request a ladder</span></a>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if recent_matches %}
+<script>
+(function() {
+    var ticker = document.getElementById('hub-ticker');
+    if (!ticker) return;
+    var items = ticker.children;
+    if (items.length <= 1) return;
+    var idx = 0;
+    for (var i = 1; i < items.length; i++) items[i].style.display = 'none';
+    setInterval(function() {
+        items[idx].style.display = 'none';
+        idx = (idx + 1) % items.length;
+        items[idx].style.display = '';
+    }, 4000);
+})();
+</script>
+{% endif %}
 {% endblock %}

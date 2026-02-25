@@ -179,7 +179,7 @@ def get_db():
 class User(UserMixin):
     def __init__(self, id, username, email=None, google_id=None, profile_picture=None,
                  phone=None, ntrp_rating=None, gender=None, is_admin=False, is_active=True,
-                 password_hash=None):
+                 password_hash=None, birth_year=None):
         self.id = id
         self.username = username
         self.email = email
@@ -191,10 +191,17 @@ class User(UserMixin):
         self.is_admin = is_admin
         self._is_active = is_active
         self.password_hash = password_hash
+        self.birth_year = birth_year
 
     @property
     def is_active(self):
         return self._is_active
+
+    @property
+    def age(self):
+        if not self.birth_year:
+            return None
+        return date.today().year - self.birth_year
 
 
 @login_manager.user_loader
@@ -212,7 +219,8 @@ def load_user(user_id):
             google_id=row.get('google_id'), profile_picture=row.get('profile_picture'),
             phone=row.get('phone'), ntrp_rating=row.get('ntrp_rating'),
             gender=row.get('gender'),
-            is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True))
+            is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True)),
+            birth_year=row.get('birth_year')
         )
     return None
 
@@ -480,6 +488,11 @@ def init_db():
         conn.rollback()
     try:
         cur.execute("ALTER TABLE ladders ADD COLUMN city TEXT DEFAULT ''")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN birth_year INTEGER")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -1094,7 +1107,8 @@ def login():
             google_id=row.get('google_id'), profile_picture=row.get('profile_picture'),
             phone=row.get('phone'), ntrp_rating=row.get('ntrp_rating'),
             gender=row.get('gender'),
-            is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True))
+            is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True)),
+            birth_year=row.get('birth_year')
         )
         login_user(user)
         user_ladders = get_user_ladders(user.id)
@@ -1116,9 +1130,21 @@ def signup():
     email = request.form.get('email', '').strip().lower()
     password = request.form.get('password', '')
     confirm_password = request.form.get('confirm_password', '')
+    birth_year_str = request.form.get('birth_year', '').strip()
 
-    if not username or not email or not password or not confirm_password:
+    if not username or not email or not password or not confirm_password or not birth_year_str:
         flash('All fields are required.')
+        return redirect(url_for('login'))
+
+    try:
+        birth_year = int(birth_year_str)
+    except ValueError:
+        flash('Please select a valid birth year.')
+        return redirect(url_for('login'))
+
+    current_year = date.today().year
+    if current_year - birth_year < 18:
+        flash('You must be at least 18 years old to join.')
         return redirect(url_for('login'))
 
     if password != confirm_password:
@@ -1140,8 +1166,8 @@ def signup():
         return redirect(url_for('login'))
 
     hashed = generate_password_hash(password)
-    cur.execute(f'''INSERT INTO users (username, email, password_hash)
-        VALUES ({ph}, {ph}, {ph})''', (username, email, hashed))
+    cur.execute(f'''INSERT INTO users (username, email, password_hash, birth_year)
+        VALUES ({ph}, {ph}, {ph}, {ph})''', (username, email, hashed, birth_year))
     conn.commit()
 
     cur.execute(f'SELECT * FROM users WHERE email = {ph}', (email,))
@@ -1150,7 +1176,8 @@ def signup():
 
     user = User(
         id=row['id'], username=row['username'], email=row.get('email'),
-        is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True))
+        is_admin=bool(row.get('is_admin')), is_active=bool(row.get('is_active', True)),
+        birth_year=row.get('birth_year')
     )
     login_user(user)
 
@@ -1279,7 +1306,8 @@ def reset_password(token):
             phone=user_row.get('phone'), ntrp_rating=user_row.get('ntrp_rating'),
             gender=user_row.get('gender'),
             is_admin=bool(user_row.get('is_admin')),
-            is_active=bool(user_row.get('is_active', True))
+            is_active=bool(user_row.get('is_active', True)),
+            birth_year=user_row.get('birth_year')
         )
         login_user(user)
         flash('Your password has been reset successfully.')
@@ -1318,7 +1346,8 @@ def google_callback():
                 profile_picture=user_data.get('profile_picture'),
                 phone=user_data.get('phone'), ntrp_rating=user_data.get('ntrp_rating'),
                 is_admin=bool(user_data.get('is_admin')),
-                is_active=bool(user_data.get('is_active', True))
+                is_active=bool(user_data.get('is_active', True)),
+                birth_year=user_data.get('birth_year')
             )
             login_user(user)
             # Set ladder in session based on membership
@@ -1381,7 +1410,8 @@ def magic_login(token):
         phone=user_row.get('phone'), ntrp_rating=user_row.get('ntrp_rating'),
         gender=user_row.get('gender'),
         is_admin=bool(user_row.get('is_admin')),
-        is_active=bool(user_row.get('is_active', True))
+        is_active=bool(user_row.get('is_active', True)),
+        birth_year=user_row.get('birth_year')
     )
     login_user(user)
     flash(f'Welcome, {user.username}!')
@@ -1463,7 +1493,35 @@ def api_me():
 def index():
     if get_brand().get('IS_HUB'):
         ladders = get_all_ladders()
-        return render_template('hub_index.html', ladders=ladders)
+        # Fetch recent confirmed matches for the ticker
+        conn = get_db()
+        cur = conn.cursor()
+        ph = get_placeholder()
+        cur.execute('''
+            SELECT m.set1_p1, m.set1_p2, m.set2_p1, m.set2_p2, m.set3_p1, m.set3_p2,
+                   u1.username as p1_name, u2.username as p2_name, l.name as ladder_name
+            FROM matches m
+            JOIN monthly_groups mg ON m.group_id = mg.id
+            JOIN ladders l ON mg.ladder_id = l.id
+            JOIN users u1 ON m.player1_id = u1.id
+            JOIN users u2 ON m.player2_id = u2.id
+            WHERE m.status = 'confirmed'
+            ORDER BY m.created_at DESC
+            LIMIT 20
+        ''')
+        rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        recent_matches = []
+        for r in rows:
+            sets = []
+            for s in range(1, 4):
+                sp1 = r.get(f'set{s}_p1')
+                sp2 = r.get(f'set{s}_p2')
+                if sp1 is not None:
+                    sets.append(f"{sp1}-{sp2}")
+            r['score'] = ', '.join(sets) if sets else 'Win'
+            recent_matches.append(r)
+        return render_template('hub_index.html', ladders=ladders, recent_matches=recent_matches)
     return render_template('index.html')
 
 
@@ -2282,6 +2340,13 @@ def edit_profile():
     email = request.form.get('email', '').strip()
     phone = request.form.get('phone', '').strip()
     ntrp = request.form.get('ntrp_rating', '').strip()
+    birth_year_str = request.form.get('birth_year', '').strip()
+    birth_year = None
+    if birth_year_str:
+        try:
+            birth_year = int(birth_year_str)
+        except ValueError:
+            pass
 
     conn = get_db()
     cur = conn.cursor()
@@ -2300,8 +2365,8 @@ def edit_profile():
         else:
             flash('Invalid file type. Use JPG, PNG, GIF, or WEBP.')
 
-    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
-                (email, phone, ntrp, current_user.id))
+    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph}, birth_year = {ph} WHERE id = {ph}',
+                (email, phone, ntrp, birth_year, current_user.id))
     conn.commit()
     conn.close()
     flash('Profile updated.')

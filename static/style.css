@@ -895,6 +895,42 @@ footer {
     pointer-events: none;
 }
 
+/* ============ HUB TICKER ============ */
+.hub-ticker-wrap {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    text-align: center;
+    min-height: 40px;
+}
+
+.hub-ticker-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.hub-ticker-ladder {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.hub-ticker-players {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.hub-ticker-score {
+    color: var(--text-muted);
+    font-family: 'Space Grotesk', monospace;
+}
+
 @media (max-width: 600px) {
     .hub-ladder-grid { grid-template-columns: 1fr; }
     .hub-steps { gap: 12px; }

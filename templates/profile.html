@@ -10,6 +10,7 @@
         <h2>{{ current_user.username }}</h2>
         <div class="meta">
             {{ current_user.email }}
+            {% if current_user.age %} &middot; Age {{ current_user.age }}{% endif %}
             {% if current_user.ntrp_rating %} &middot; NTRP {{ current_user.ntrp_rating }}{% endif %}
             {% if current_user.phone %} &middot; {{ current_user.phone }}{% endif %}
         </div>
@@ -75,6 +76,25 @@
                         <option value="{{ r }}" {{ 'selected' if current_user.ntrp_rating == r }}>{{ r }}</option>
                     {% endfor %}
                 </select>
+            </div>
+            <div class="form-group" style="flex: 0 0 110px;">
+                <label>Birth Year</label>
+                <select name="birth_year" id="birth-year-select">
+                    <option value="">—</option>
+                </select>
+                <script>
+                    (function() {
+                        var sel = document.getElementById('birth-year-select');
+                        var y = new Date().getFullYear();
+                        var cur = {{ current_user.birth_year or 'null' }};
+                        for (var i = y - 18; i >= y - 90; i--) {
+                            var opt = document.createElement('option');
+                            opt.value = i; opt.textContent = i;
+                            if (i === cur) opt.selected = true;
+                            sel.appendChild(opt);
+                        }
+                    })();
+                </script>
             </div>
         </div>
         {% if not ladder_player %}
