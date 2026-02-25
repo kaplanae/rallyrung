@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, g
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -22,9 +22,55 @@ resend.api_key = os.environ.get('RESEND_API_KEY')
 
 ADMIN_EMAILS = ['kaplanae@gmail.com']
 
+BRANDS = {
+    'rallyrung.com': {
+        'APP_NAME': 'RallyRung',
+        'APP_DOMAIN': 'rallyrung.com',
+        'APP_TAGLINE': 'Texas Tennis Ladder',
+        'APP_LOGO_LEFT': 'Rally',
+        'APP_LOGO_RIGHT': 'Rung',
+        'EMAIL_FROM': 'RallyRung <noreply@rallyrung.com>',
+        'IS_HUB': False,
+    },
+    'cedarparktennisladder.com': {
+        'APP_NAME': 'Cedar Park Tennis Ladder',
+        'APP_DOMAIN': 'cedarparktennisladder.com',
+        'APP_TAGLINE': 'Cedar Park Tennis Ladder',
+        'APP_LOGO_LEFT': 'Cedar Park',
+        'APP_LOGO_RIGHT': 'Tennis',
+        'EMAIL_FROM': 'Cedar Park Tennis Ladder <noreply@cedarparktennisladder.com>',
+        'IS_HUB': False,
+    },
+    'texastennisladder.com': {
+        'APP_NAME': 'Texas Tennis Ladder',
+        'APP_DOMAIN': 'texastennisladder.com',
+        'APP_TAGLINE': 'Competitive Tennis Ladders Across Texas',
+        'APP_LOGO_LEFT': 'Texas Tennis',
+        'APP_LOGO_RIGHT': 'Ladder',
+        'EMAIL_FROM': 'Texas Tennis Ladder <noreply@texastennisladder.com>',
+        'IS_HUB': True,
+    },
+}
+
+BRANDS['localhost'] = BRANDS['texastennisladder.com']
+BRANDS['64.181.207.26'] = BRANDS['cedarparktennisladder.com']
+
+DEFAULT_BRAND = BRANDS['rallyrung.com']
+
+
+def get_brand():
+    """Get the brand config for the current request, or the default outside a request."""
+    try:
+        return g.brand
+    except (AttributeError, RuntimeError):
+        return DEFAULT_BRAND
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'rallyrung-dev-secret-key-change-in-production')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 CENTRAL_TZ = ZoneInfo('America/Chicago')
 
@@ -36,6 +82,19 @@ def to_central_filter(dt):
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(CENTRAL_TZ)
+
+@app.before_request
+def set_brand():
+    host = request.host.split(':')[0]  # strip port for local dev
+    g.brand = BRANDS.get(host, DEFAULT_BRAND)
+
+@app.context_processor
+def inject_branding():
+    brand = get_brand()
+    ctx = {'brand': brand, 'is_hub': brand.get('IS_HUB', False)}
+    if brand.get('IS_HUB'):
+        ctx['hub_ladders'] = get_all_ladders()
+    return ctx
 
 # Flask-Login setup
 login_manager = LoginManager()
@@ -79,7 +138,7 @@ def send_email(to, subject, html):
         return False
     try:
         resend.Emails.send({
-            "from": "RallyRung <noreply@rallyrung.com>",
+            "from": get_brand()['EMAIL_FROM'],
             "to": [to] if isinstance(to, str) else to,
             "subject": subject,
             "html": html
@@ -90,10 +149,12 @@ def send_email(to, subject, html):
         return False
 
 
-def email_wrap(body_html, footer_text="Texas Tennis Ladder — rallyrung.com"):
+def email_wrap(body_html, footer_text=None):
     """Wrap email body in a consistent layout."""
+    if footer_text is None:
+        footer_text = f"{get_brand()['APP_TAGLINE']} — {get_brand()['APP_DOMAIN']}"
     return f'''<div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-  <h2 style="color: #e74c3c;">RallyRung</h2>
+  <h2 style="color: #e74c3c;">{get_brand()['APP_NAME']}</h2>
   {body_html}
   <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
   <p style="color: #999; font-size: 12px;">{footer_text}</p>
@@ -412,13 +473,26 @@ def init_db():
     except Exception:
         conn.rollback()
 
+    try:
+        cur.execute("ALTER TABLE ladders ADD COLUMN ladder_type TEXT DEFAULT 'singles'")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        cur.execute("ALTER TABLE ladders ADD COLUMN city TEXT DEFAULT ''")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
     # Seed default ladder (idempotent)
     cur.execute('SELECT id FROM ladders LIMIT 1')
     if not cur.fetchone():
-        cur.execute("INSERT INTO ladders (name, sport) VALUES ('Cedar Park', 'tennis')")
+        cur.execute("INSERT INTO ladders (name, sport, city, ladder_type) VALUES ('Cedar Park', 'tennis', 'Cedar Park', 'singles')")
     else:
         # Rename legacy ladder name if needed
         cur.execute(f"UPDATE ladders SET name = 'Cedar Park' WHERE name = 'RallyRung Tennis Ladder'")
+        # Backfill city/ladder_type on existing Cedar Park row
+        cur.execute("UPDATE ladders SET city = 'Cedar Park', ladder_type = 'singles' WHERE name = 'Cedar Park' AND (city IS NULL OR city = '')")
 
     conn.commit()
 
@@ -858,7 +932,7 @@ def get_group_standings(group_id):
     if group.get('player3_id'):
         player_ids.append(group['player3_id'])
 
-    cur.execute(f"SELECT * FROM matches WHERE group_id = {ph} AND status = 'confirmed'", (group_id,))
+    cur.execute(f"SELECT * FROM matches WHERE group_id = {ph} AND status IN ('confirmed', 'pending')", (group_id,))
     matches = [dict(r) for r in cur.fetchall()]
     conn.close()
 
@@ -1081,13 +1155,13 @@ def signup():
     login_user(user)
 
     # Send welcome email
-    send_email(email, "Welcome to RallyRung!", email_wrap(f'''
+    send_email(email, f"Welcome to {get_brand()['APP_NAME']}!", email_wrap(f'''
         <p>Hi {username},</p>
-        <p>Welcome to RallyRung! Your account has been created.</p>
+        <p>Welcome to {get_brand()['APP_NAME']}! Your account has been created.</p>
         <p>Head to your <a href="{url_for('profile', _external=True)}">profile</a> to complete your setup and join a ladder.</p>
     '''))
 
-    flash(f'Welcome to RallyRung, {user.username}! Complete your profile and join a ladder to start competing.')
+    flash(f'Welcome to {get_brand()["APP_NAME"]}, {user.username}! Complete your profile and join a ladder to start competing.')
     return redirect(url_for('profile'))
 
 
@@ -1120,7 +1194,7 @@ def forgot_password():
         conn.commit()
 
         link = url_for('reset_password', token=token, _external=True)
-        send_email(email, "Reset your RallyRung password", email_wrap(f'''
+        send_email(email, f"Reset your {get_brand()['APP_NAME']} password", email_wrap(f'''
             <p>We received a request to reset your password.</p>
             <p><a href="{link}" style="display:inline-block;padding:12px 24px;background:#2ecc71;color:#000;
             border-radius:6px;font-weight:600;text-decoration:none;">Reset Password</a></p>
@@ -1353,6 +1427,20 @@ def switch_ladder(ladder_id):
     return redirect(url_for('ladder'))
 
 
+@app.route('/ladder/<int:ladder_id>')
+def ladder_deeplink(ladder_id):
+    """Public deep-link: set the session ladder and redirect to /ladder."""
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'SELECT id FROM ladders WHERE id = {ph}', (ladder_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        session['ladder_id'] = ladder_id
+    return redirect(url_for('ladder'))
+
+
 # ============ API ROUTES ============
 
 @app.route('/api/me')
@@ -1373,12 +1461,62 @@ def api_me():
 
 @app.route('/')
 def index():
+    if get_brand().get('IS_HUB'):
+        ladders = get_all_ladders()
+        return render_template('hub_index.html', ladders=ladders)
     return render_template('index.html')
 
 
 @app.route('/rules')
 def rules():
     return render_template('rules.html')
+
+
+@app.route('/contact', methods=['GET', 'POST'])
+@login_required
+def contact():
+    if request.method == 'POST':
+        subject = request.form.get('subject', '').strip()
+        message = request.form.get('message', '').strip()
+        if not subject or not message:
+            flash('Please fill in both subject and message.')
+            return redirect(url_for('contact'))
+        send_email(
+            ADMIN_EMAILS,
+            f"[Contact] {subject}",
+            email_wrap(f'''<p><strong>From:</strong> {current_user.username} ({current_user.email})</p>
+<p><strong>Subject:</strong> {subject}</p>
+<hr style="border: none; border-top: 1px solid #eee;">
+<p>{message.replace(chr(10), "<br>")}</p>''')
+        )
+        flash('Your message has been sent! We\'ll get back to you soon.')
+        return redirect(url_for('contact'))
+    return render_template('contact.html')
+
+
+@app.route('/request-ladder', methods=['GET', 'POST'])
+def request_ladder():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        email = request.form.get('email', '').strip()
+        city = request.form.get('city', '').strip()
+        comments = request.form.get('comments', '').strip()
+        if not name or not email or not city:
+            flash('Please fill in your name, email, and city.')
+            return redirect(url_for('request_ladder'))
+        send_email(
+            ADMIN_EMAILS,
+            f"[TTL] Ladder Request — {city}",
+            email_wrap(f'''<p><strong>New Ladder Request</strong></p>
+<p><strong>Name:</strong> {name}</p>
+<p><strong>Email:</strong> {email}</p>
+<p><strong>City:</strong> {city}</p>
+<hr style="border: none; border-top: 1px solid #eee;">
+<p>{comments.replace(chr(10), "<br>") if comments else "(no comments)"}</p>''')
+        )
+        flash('Thanks! Your request has been submitted. We\'ll be in touch.')
+        return redirect(url_for('request_ladder'))
+    return render_template('request_ladder.html')
 
 
 @app.route('/ladder')
@@ -1455,11 +1593,27 @@ def ladder():
                         tb_a, tb_b = (parts[0], parts[1]) if is_p1 else (parts[1], parts[0])
                         score += f"({tb_a})"
                 sets.append(score)
-        return '  '.join(sets), match.get('winner_id')
+        score_str = ', '.join(sets)
+        outcome = match.get('outcome_type', 'completed')
+        if outcome == 'retirement':
+            suffix = 'ret.' if score_str else 'Injury, Win'
+            score_str = f"{score_str} ({suffix})" if score_str else suffix
+        elif outcome == 'forfeit':
+            score_str = 'Forfeit, Win'
+        return score_str, match.get('winner_id')
+
+    # Build per-player games +/- from group standings
+    player_games = {}
+    for g in groups:
+        standings = g.get('standings', {})
+        for pid, s in standings.items():
+            player_games[pid] = {'games_won': s.get('games_won', 0), 'games_lost': s.get('games_lost', 0)}
 
     def make_row(p, opp):
         score, winner_id = get_match_info(p, opp) if opp else ('', None)
-        return {'player': p, 'opponent': opp, 'score': score, 'winner_id': winner_id}
+        pg = player_games.get(p['id'], {'games_won': 0, 'games_lost': 0})
+        return {'player': p, 'opponent': opp, 'score': score, 'winner_id': winner_id,
+                'games_won': pg['games_won'], 'games_lost': pg['games_lost']}
 
     ladder_groups = []
     for i in range(0, len(players), 3):
@@ -1476,10 +1630,17 @@ def ladder():
             rows.append(make_row(gp[0], None))
         ladder_groups.append({'number': i // 3 + 1, 'rows': rows})
 
+    # Check if current user is a member of this ladder
+    is_member = False
+    if current_user.is_authenticated:
+        player_ids = [p['id'] for p in players]
+        is_member = current_user.id in player_ids
+
     conn.close()
     ladder_name = get_ladder_name(ladder_id)
     return render_template('ladder.html', players=players, ladder_groups=ladder_groups,
-                           groups=groups, month=month, year=year, ladder_name=ladder_name)
+                           groups=groups, month=month, year=year, ladder_name=ladder_name,
+                           is_member=is_member)
 
 
 @app.route('/my-group')
@@ -1532,8 +1693,16 @@ def my_group():
 
     standings = get_group_standings(group['id'])
 
+    # Filter out opponents who already have a match submitted
+    played_opponents = set()
+    for m in matches:
+        if m['player1_id'] == current_user.id:
+            played_opponents.add(m['player2_id'])
+        elif m['player2_id'] == current_user.id:
+            played_opponents.add(m['player1_id'])
+
     # Get availability for all group members (current month only)
-    opponent_ids = [pid for pid in player_ids if pid and pid != current_user.id]
+    opponent_ids = [pid for pid in player_ids if pid and pid != current_user.id and pid not in played_opponents]
     month_prefix = f'{year}-{month:02d}'
     availability = {}
     for pid in player_ids:
@@ -1605,8 +1774,16 @@ def submit_result():
         player_ids.append(group['player3_id'])
     opponent_ids = [pid for pid in player_ids if pid and pid != current_user.id]
 
+    # Filter out opponents who already have a pending/confirmed match with current user
     opponents = []
     for pid in opponent_ids:
+        cur.execute(f'''
+            SELECT id FROM matches
+            WHERE group_id = {ph} AND status IN ('pending', 'confirmed')
+              AND ((player1_id = {ph} AND player2_id = {ph}) OR (player1_id = {ph} AND player2_id = {ph}))
+        ''', (group['id'], current_user.id, pid, pid, current_user.id))
+        if cur.fetchone():
+            continue  # already have a match with this opponent
         cur.execute(f'SELECT id, username FROM users WHERE id = {ph}', (pid,))
         opp = cur.fetchone()
         if opp:
@@ -1980,14 +2157,14 @@ def ladder_join():
             email_wrap(f'''<p>Hi {current_user.username},</p>
 <p>You've signed up for the <strong>{ladder_name} Singles Tennis Ladder</strong>!</p>
 <p>You'll be added to the ladder at the beginning of <strong>{next_month_name}</strong>. We'll email you when you're placed.</p>''',
-                f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+                f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
     # Notify admins
     send_email(ADMIN_EMAILS, f"New player signed up: {current_user.username}",
         email_wrap(f'''<p><strong>{current_user.username}</strong> signed up for the {ladder_name} ladder.</p>
 <p>NTRP: {ntrp_rating} &middot; Email: {cur_user_email or 'none'} &middot; Phone: {phone or 'none'}</p>
 <p>They'll be added at the next monthly reset ({next_month_name}).</p>''',
-            f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+            f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
     return redirect(url_for('profile'))
 
@@ -2021,13 +2198,13 @@ def ladder_leave():
                 email_wrap(f'''<p>Hi {current_user.username},</p>
 <p>You've been removed from the <strong>{ladder_name} Singles Tennis Ladder</strong>.</p>
 <p>You can rejoin anytime from your <a href="{url_for('profile', _external=True)}">profile page</a>.</p>''',
-                    f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+                    f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
         # Notify admins
         send_email(ADMIN_EMAILS, f"Player left ladder: {current_user.username}",
             email_wrap(f'''<p><strong>{current_user.username}</strong> has left the {ladder_name} ladder.</p>
 <p>Email: {current_user.email or 'none'}</p>''',
-                f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+                f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
     else:
         flash('You are not on the ladder.')
 
@@ -2056,7 +2233,7 @@ def ladder_pause():
 
     send_email(ADMIN_EMAILS, f"Player paused: {current_user.username}",
         email_wrap(f'''<p><strong>{current_user.username}</strong> has paused their participation on the {ladder_name} ladder.</p>''',
-            f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+            f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
     return redirect(url_for('profile'))
 
@@ -2094,7 +2271,7 @@ def ladder_unpause():
 
     send_email(ADMIN_EMAILS, f"Player unpaused: {current_user.username}",
         email_wrap(f'''<p><strong>{current_user.username}</strong> has rejoined the {ladder_name} ladder.</p>''',
-            f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+            f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
     return redirect(url_for('profile'))
 
@@ -2109,6 +2286,20 @@ def edit_profile():
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
+
+    # Handle profile picture upload
+    file = request.files.get('profile_picture')
+    if file and file.filename:
+        ext = file.filename.rsplit('.', 1)[-1].lower()
+        if ext in ('jpg', 'jpeg', 'png', 'gif', 'webp'):
+            filename = f"{uuid.uuid4().hex}.{ext}"
+            file.save(os.path.join(UPLOAD_FOLDER, filename))
+            profile_pic_url = url_for('static', filename=f'uploads/{filename}')
+            cur.execute(f'UPDATE users SET profile_picture = {ph} WHERE id = {ph}',
+                        (profile_pic_url, current_user.id))
+        else:
+            flash('Invalid file type. Use JPG, PNG, GIF, or WEBP.')
+
     cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
                 (email, phone, ntrp, current_user.id))
     conn.commit()
@@ -2578,6 +2769,84 @@ def admin_generate_login_link():
     return redirect(url_for('admin'))
 
 
+@app.route('/admin/bulk-invite', methods=['POST'])
+@login_required
+@require_admin
+def admin_bulk_invite():
+    """Send welcome/migration emails with magic login links to all players who haven't logged in yet."""
+    ladder_id = get_ladder_id()
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # Get the ladder name
+    cur.execute(f'SELECT name FROM ladders WHERE id = {ph}', (ladder_id,))
+    ladder_name = dict(cur.fetchone())['name']
+
+    # Find active ladder players who have never logged in:
+    # - No google_id (never used Google login)
+    # - No password_hash (never set a password)
+    # - No existing unused magic token (avoid sending duplicates)
+    cur.execute(f'''
+        SELECT u.id, u.username, u.email, lp.ranking
+        FROM ladder_players lp
+        JOIN users u ON lp.user_id = u.id
+        WHERE lp.ladder_id = {ph} AND lp.is_active = {ph}
+          AND u.email IS NOT NULL AND u.email != ''
+          AND u.google_id IS NULL
+          AND (u.password_hash IS NULL OR u.password_hash = '')
+        ORDER BY lp.ranking ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1))
+    players = [dict(r) for r in cur.fetchall()]
+
+    sent = 0
+    skipped = 0
+    limit = 100  # Resend free tier daily limit
+    for p in players:
+        if sent >= limit:
+            break
+        # Check if they already have an unused magic token (already invited)
+        cur.execute(f'''
+            SELECT id FROM magic_tokens
+            WHERE email = {ph} AND used = {ph}
+        ''', (p['email'], False if USE_POSTGRES else 0))
+        if cur.fetchone():
+            skipped += 1
+            continue
+
+        token = str(uuid.uuid4())
+        expires_at = datetime(2099, 12, 31)  # Never expires; single-use
+
+        cur.execute(f'''
+            INSERT INTO magic_tokens (email, token, expires_at)
+            VALUES ({ph}, {ph}, {ph})
+        ''', (p['email'], token, expires_at))
+
+        link = url_for('magic_login', token=token, _external=True)
+        email_sent = send_email(p['email'],
+            f"Welcome to the {ladder_name} Tennis Ladder on {get_brand()['APP_NAME']}!",
+            email_wrap(f'''
+                <p>Hi {p['username']},</p>
+                <p>Your account on the <strong>{ladder_name}</strong> tennis ladder is ready on <strong>{get_brand()['APP_NAME']}</strong>.</p>
+                <p>Your account is already set up at <strong>rank #{p['ranking']}</strong>. Just click below to log in and claim it:</p>
+                <p><a href="{link}" style="display:inline-block;padding:14px 28px;background:#2ecc71;color:#000;
+                border-radius:6px;font-weight:700;text-decoration:none;font-size:1rem;">Log In to {get_brand()['APP_NAME']}</a></p>
+                <p style="color:#999;font-size:13px;">This link is unique to you — don't share it. Once you log in, you can set a password or link your Google account.</p>
+            ''', f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
+
+        if email_sent:
+            sent += 1
+        else:
+            skipped += 1
+
+    conn.commit()
+    conn.close()
+    remaining = len(players) - sent - skipped
+    remain_msg = f' {remaining} remaining — click again tomorrow.' if remaining > 0 else ''
+    flash(f'Bulk invite complete: {sent} emails sent, {skipped} skipped.{remain_msg}')
+    return redirect(url_for('admin'))
+
+
 @app.route('/admin/add-to-ladder', methods=['POST'])
 @login_required
 @require_admin
@@ -2641,9 +2910,9 @@ def admin_add_to_ladder():
                 email_wrap(f'''<p>Hi {user_row['username']},</p>
 <p>You've been added to the <strong>{ladder_name} Singles Tennis Ladder</strong> at rank #{ranking}.</p>
 <p>Each month you'll be placed in a group of 2-3 players. Play your matches, submit scores, and climb the ladder!</p>
-<p><a href="https://rallyrung.com/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>
-<p><a href="https://rallyrung.com/rules" style="color: #e74c3c;">Read the Rules</a></p>''',
-                    f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+<p><a href="https://{get_brand()['APP_DOMAIN']}/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>
+<p><a href="https://{get_brand()['APP_DOMAIN']}/rules" style="color: #e74c3c;">Read the Rules</a></p>''',
+                    f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
     conn.close()
     flash('Player added to ladder.')
@@ -3123,7 +3392,7 @@ def admin_monthly_reset():
                             email_wrap(f'''<p>Hi {dropped_user['username']},</p>
 <p>You have been removed from the <strong>{ladder_name} Singles Tennis Ladder</strong> for not playing any matches for 2 consecutive months.</p>
 <p>You can rejoin at any time — just contact the ladder admin.</p>''',
-                                f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+                                f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
             else:
                 cur.execute(f'UPDATE ladder_players SET inactive_months = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
                             (new_inactive, uid, ladder_id))
@@ -3140,8 +3409,8 @@ def admin_monthly_reset():
                                 email_wrap(f'''<p>Hi {warn_user['username']},</p>
 <p>You did not play any matches this month on the <strong>{ladder_name} Singles Tennis Ladder</strong>.</p>
 <p>If you do not play next month, you will be automatically removed from the ladder.</p>
-<p><a href="https://rallyrung.com/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>''',
-                                    f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+<p><a href="https://{get_brand()['APP_DOMAIN']}/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>''',
+                                    f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
     # Activate pending players — add them to the bottom of the ladder
     cur.execute(f'''
@@ -3176,8 +3445,8 @@ def admin_monthly_reset():
                     email_wrap(f'''<p>Hi {pp['username']},</p>
 <p>You've been placed on the <strong>{ladder_name} Singles Tennis Ladder</strong> at rank <strong>#{new_rank}</strong>.</p>
 <p>Groups will be assigned shortly. Check your group and schedule matches!</p>
-<p><a href="https://rallyrung.com/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>''',
-                        f"{ladder_name} Singles Tennis Ladder — rallyrung.com"))
+<p><a href="https://{get_brand()['APP_DOMAIN']}/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>''',
+                        f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
     pending_msg = f' {len(pending_players)} new player(s) added.' if pending_players else ''
 

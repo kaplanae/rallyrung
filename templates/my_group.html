@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}My Group — RallyRung{% endblock %}
+{% block title %}My Group — {{ brand.APP_NAME }}{% endblock %}
 
 {% block content %}
 <h1 class="page-title">My Group</h1>
@@ -182,10 +182,10 @@
                     <span class="set-score">{{ m.set1_p1 }}-{{ m.set1_p2 }}</span>
                 {% endif %}
                 {% if m.set2_p1 is not none %}
-                    <span class="set-score">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
+                    ,<span class="set-score">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
                 {% endif %}
                 {% if m.set3_p1 is not none %}
-                    <span class="set-score">{{ m.set3_p1 }}-{{ m.set3_p2 }}</span>
+                    ,<span class="set-score">{{ m.set3_p1 }}-{{ m.set3_p2 }}</span>
                 {% endif %}
                 {% if m.winner_name %}
                     <span style="margin-left: 8px; color: var(--accent); font-weight: 600;">Winner: {{ m.winner_name }}</span>
@@ -229,7 +229,7 @@
                 <th>Player</th>
                 <th>W</th>
                 <th>L</th>
-                <th>Games +/-</th>
+                <th>Sets +/-</th>
             </tr>
         </thead>
         <tbody>
@@ -239,7 +239,7 @@
                 <td>{{ p.username }}</td>
                 <td>{{ standings[p.id].wins }}</td>
                 <td>{{ standings[p.id].losses }}</td>
-                <td>{{ standings[p.id].games_won }}-{{ standings[p.id].games_lost }}</td>
+                <td>{{ standings[p.id].sets_won }}-{{ standings[p.id].sets_lost }}</td>
             </tr>
             {% endif %}
             {% endfor %}

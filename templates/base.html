@@ -3,22 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}RallyRung — Tennis Ladder{% endblock %}</title>
+    <title>{% block title %}{{ brand.APP_NAME }} — Tennis Ladder{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
 </head>
 <body>
     <div class="app-container">
         <header>
             <nav>
-                <a href="{{ url_for('index') }}" class="logo">Rally<span class="logo-accent">Rung</span></a>
+                <a href="{{ url_for('index') }}" class="logo">{{ brand.APP_LOGO_LEFT }}<span class="logo-accent">{{ brand.APP_LOGO_RIGHT }}</span></a>
                 <button class="hamburger" onclick="document.querySelector('nav').classList.toggle('nav-open')" aria-label="Menu">
                     <span></span><span></span><span></span>
                 </button>
                 <div class="nav-links">
+                    {% if is_hub %}
+                    <div class="nav-dropdown">
+                        <a href="#" class="nav-dropdown-toggle" onclick="event.preventDefault(); this.parentElement.classList.toggle('open');">Find a Ladder &#9662;</a>
+                        <div class="nav-dropdown-menu">
+                            {% for l in hub_ladders %}
+                            <a href="{{ url_for('ladder_deeplink', ladder_id=l.id) }}">{{ l.name }} {{ l.ladder_type|default('Singles', true)|title }}</a>
+                            {% endfor %}
+                            <div class="nav-dropdown-sep"></div>
+                            <a href="{{ url_for('request_ladder') }}">Request a Ladder</a>
+                        </div>
+                    </div>
+                    {% else %}
                     <a href="{{ url_for('ladder') }}">Ladder</a>
+                    {% endif %}
                     <a href="{{ url_for('rules') }}">Rules</a>
                     {% if current_user.is_authenticated %}
                         <a href="{{ url_for('my_group') }}">My Group</a>
@@ -57,7 +70,7 @@
         </main>
 
         <footer>
-            <p>&copy; RallyRung</p>
+            <p>&copy; {{ brand.APP_NAME }} &middot; <a href="{{ url_for('contact') }}">Contact</a></p>
         </footer>
     </div>
 

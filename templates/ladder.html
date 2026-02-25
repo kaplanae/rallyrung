@@ -1,8 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Ladder — RallyRung{% endblock %}
+{% block title %}Ladder — {{ brand.APP_NAME }}{% endblock %}
 
 {% block content %}
+{% if is_hub %}
+<a href="{{ url_for('index') }}" style="font-size: 0.85rem; color: var(--text-muted); display: inline-block; margin-bottom: 12px;">&larr; Back to Texas Tennis Ladder</a>
+{% endif %}
+
 <h1 class="page-title">{{ ladder_name }} Tennis Ladder</h1>
+
+{% if not current_user.is_authenticated %}
+<div class="card" style="margin-bottom: 20px; border-color: var(--accent); background: var(--accent-dim);">
+    <p style="margin: 0; color: var(--accent);">Not a member yet? Create your free profile by clicking <a href="{{ url_for('login') }}" style="font-weight: 700; text-decoration: underline;">HERE</a>.</p>
+</div>
+{% endif %}
 
 {% if ladder_groups %}
 <div class="card">

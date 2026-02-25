@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Profile — RallyRung{% endblock %}
+{% block title %}Profile — {{ brand.APP_NAME }}{% endblock %}
 
 {% block content %}
 <div class="profile-header">
@@ -45,20 +45,32 @@
     <div class="card-header">
         <h3>Edit Profile</h3>
     </div>
-    <form id="profile-form" method="POST" action="{{ url_for('edit_profile') }}">
-        <div class="form-group">
-            <label>Email</label>
-            <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="you@example.com">
+    <form id="profile-form" method="POST" action="{{ url_for('edit_profile') }}" enctype="multipart/form-data">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+            {% if current_user.profile_picture %}
+                <img src="{{ current_user.profile_picture }}" alt="" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+            {% else %}
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1rem;">?</div>
+            {% endif %}
+            <input type="file" name="profile_picture" accept=".jpg,.jpeg,.png,.gif,.webp" id="pic-input" style="display: none;">
+            <button type="button" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem; padding: 4px 10px;" onclick="document.getElementById('pic-input').click();">
+                {{ 'Change' if current_user.profile_picture else 'Upload' }}
+            </button>
+            <span id="pic-filename" style="font-size: 0.8rem; color: var(--text-muted);"></span>
         </div>
         <div class="form-row">
-            <div class="form-group">
+            <div class="form-group" style="flex: 2;">
+                <label>Email</label>
+                <input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="you@example.com">
+            </div>
+            <div class="form-group" style="flex: 1;">
                 <label>Phone</label>
                 <input type="tel" name="phone" id="phone-input" value="{{ current_user.phone or '' }}" placeholder="(555) 123-4567">
             </div>
-            <div class="form-group">
-                <label>NTRP Rating</label>
+            <div class="form-group" style="flex: 0 0 90px;">
+                <label>NTRP</label>
                 <select name="ntrp_rating" id="ntrp-select">
-                    <option value="">Select...</option>
+                    <option value="">—</option>
                     {% for r in ['2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5'] %}
                         <option value="{{ r }}" {{ 'selected' if current_user.ntrp_rating == r }}>{{ r }}</option>
                     {% endfor %}
@@ -162,10 +174,10 @@
             <span class="set-score">{{ m.set1_p1 }}-{{ m.set1_p2 }}</span>
         {% endif %}
         {% if m.set2_p1 is not none %}
-            <span class="set-score">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
+            ,<span class="set-score">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
         {% endif %}
         {% if m.set3_p1 is not none %}
-            <span class="set-score">{{ m.set3_p1 }}-{{ m.set3_p2 }}</span>
+            ,<span class="set-score">{{ m.set3_p1 }}-{{ m.set3_p2 }}</span>
         {% endif %}
         {% if m.winner_name %}
             <span style="margin-left: 8px; color: var(--accent); font-weight: 600;">
@@ -179,6 +191,14 @@
 
 <script>
 (function() {
+    var picInput = document.getElementById('pic-input');
+    var picLabel = document.getElementById('pic-filename');
+    if (picInput) {
+        picInput.addEventListener('change', function() {
+            picLabel.textContent = this.files[0] ? this.files[0].name : '';
+        });
+    }
+
     var input = document.getElementById('phone-input');
     if (!input) return;
 

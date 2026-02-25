@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ brand.APP_NAME }} — Competitive Tennis Ladders Across Texas{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>Texas Tennis <span class="accent">Ladder</span></h1>
+    <p class="subtitle">Competitive monthly tennis ladders across Texas. Get grouped, play round robin, and climb the ranks.</p>
+</div>
+
+<div class="how-it-works">
+    <div class="step">
+        <div class="step-number">1</div>
+        <h3>Find Your City</h3>
+        <p>Browse available ladders below and pick the one closest to you.</p>
+    </div>
+    <div class="step">
+        <div class="step-number">2</div>
+        <h3>Create a Profile</h3>
+        <p>Sign up for free and join your local ladder in seconds.</p>
+    </div>
+    <div class="step">
+        <div class="step-number">3</div>
+        <h3>Play Matches</h3>
+        <p>Each month you're grouped with nearby players for round robin matches.</p>
+    </div>
+    <div class="step">
+        <div class="step-number">4</div>
+        <h3>Climb the Ladder</h3>
+        <p>Win your group to move up. Results are tracked and rankings update monthly.</p>
+    </div>
+</div>
+
+<h2 class="section-title" style="margin-top: 40px;">Available Ladders</h2>
+
+<div class="hub-ladder-grid">
+    {% for l in ladders %}
+    <a href="{{ url_for('ladder_deeplink', ladder_id=l.id) }}" class="hub-ladder-card">
+        <div class="hub-ladder-icon">&#127934;</div>
+        <h3>{{ l.name }} {{ l.ladder_type|default('Singles', true)|title }}</h3>
+        <p>{{ l.city|default('', true) }}</p>
+    </a>
+    {% endfor %}
+
+    <div class="hub-ladder-card hub-ladder-coming-soon">
+        <div class="hub-ladder-icon" style="opacity: 0.4;">&#127934;</div>
+        <h3>Cedar Park Doubles</h3>
+        <p>Coming Soon</p>
+    </div>
+
+    <div class="hub-ladder-card hub-ladder-coming-soon">
+        <div class="hub-ladder-icon" style="opacity: 0.4;">&#127934;</div>
+        <h3>Steiner Ranch Singles</h3>
+        <p>Coming Soon</p>
+    </div>
+</div>
+
+<div style="text-align: center; margin: 40px 0;">
+    <p style="color: var(--text-muted); margin-bottom: 16px;">Don't see your city? Let us know and we'll set one up.</p>
+    <a href="{{ url_for('request_ladder') }}" class="btn btn-primary">Request a Ladder in Your City</a>
+</div>
+{% endblock %}

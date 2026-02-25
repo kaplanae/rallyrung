@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Request a Ladder — {{ brand.APP_NAME }}{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Request a Ladder in Your City</h1>
+
+<div class="card">
+    <p style="color: var(--text-muted); margin-bottom: 20px;">Tell us where you play and we'll work on launching a ladder near you.</p>
+
+    <form method="POST" action="{{ url_for('request_ladder') }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Your Name</label>
+                <input type="text" name="name" required maxlength="100" placeholder="Jane Smith">
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" required maxlength="200" placeholder="jane@example.com">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>City / Area</label>
+            <input type="text" name="city" required maxlength="100" placeholder="e.g. Round Rock, Steiner Ranch, Leander">
+        </div>
+
+        <div class="form-group">
+            <label>Comments (optional)</label>
+            <textarea name="comments" rows="4" maxlength="1000" placeholder="Preferred courts, how many players you know, anything else..."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Submit Request</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}RallyRung — Competitive Tennis Ladder{% endblock %}
+{% block title %}{{ brand.APP_NAME }} — Competitive Tennis Ladder{% endblock %}
 
 {% block content %}
 <div class="hero">
     <h1>Climb the <span class="accent">Ladder</span></h1>
-    <p class="subtitle">RallyRung is a monthly tennis ladder. Get grouped, play round robin, and climb the ranks based on your results.</p>
+    <p class="subtitle">{{ brand.APP_NAME }} is a monthly tennis ladder. Get grouped, play round robin, and climb the ranks based on your results.</p>
 
     {% if current_user.is_authenticated %}
         <a href="{{ url_for('ladder') }}" class="btn btn-primary">View Ladder</a>

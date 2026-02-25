@@ -492,16 +492,17 @@ nav {
 
 .match-scores {
     display: flex;
-    gap: 12px;
+    gap: 24px;
     font-size: 0.9rem;
     color: var(--text-muted);
 }
 
 .set-score {
-    padding: 2px 8px;
+    padding: 2px 4px;
     background: var(--bg-card);
     border-radius: 4px;
 }
+
 
 .match-actions {
     display: flex;
@@ -727,4 +728,116 @@ footer {
     nav.nav-open .hamburger span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
     nav.nav-open .hamburger span:nth-child(2) { opacity: 0; }
     nav.nav-open .hamburger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+    /* Mobile dropdown: static, toggle via .open */
+    .nav-dropdown-menu {
+        position: static;
+        box-shadow: none;
+        border: none;
+        background: transparent;
+        padding: 0 0 0 12px;
+    }
+    .nav-dropdown.open .nav-dropdown-menu { display: block; }
+}
+
+/* ============ NAV DROPDOWN ============ */
+.nav-dropdown {
+    position: relative;
+}
+
+.nav-dropdown-toggle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 4px 0;
+    transition: color 0.2s;
+    cursor: pointer;
+}
+
+.nav-dropdown-toggle:hover { color: var(--accent); }
+
+.nav-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 220px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 0;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.nav-dropdown:hover .nav-dropdown-menu,
+.nav-dropdown:focus-within .nav-dropdown-menu {
+    display: block;
+}
+
+.nav-dropdown-menu a {
+    display: block;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    color: var(--text);
+    transition: background 0.15s;
+}
+
+.nav-dropdown-menu a:hover {
+    background: var(--bg-card-hover);
+    color: var(--accent);
+}
+
+.nav-dropdown-sep {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+
+/* ============ HUB LADDER GRID ============ */
+.hub-ladder-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.hub-ladder-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 20px;
+    text-align: center;
+    transition: border-color 0.2s, background 0.2s;
+    text-decoration: none;
+    color: var(--text);
+    display: block;
+}
+
+.hub-ladder-card:hover {
+    border-color: var(--accent);
+    background: var(--bg-card-hover);
+    color: var(--text);
+}
+
+.hub-ladder-icon {
+    font-size: 2rem;
+    margin-bottom: 10px;
+}
+
+.hub-ladder-card h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.hub-ladder-card p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.hub-ladder-coming-soon {
+    opacity: 0.5;
+    pointer-events: none;
 }

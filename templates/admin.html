@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Admin — RallyRung{% endblock %}
+{% block title %}Admin — {{ brand.APP_NAME }}{% endblock %}
 
 {% block content %}
 <h1 class="page-title">Admin Panel — {{ ladder_name }}</h1>
@@ -21,6 +21,18 @@
             <button type="submit" class="btn btn-secondary">Run Monthly Reset</button>
         </form>
     </div>
+</div>
+
+<!-- Bulk Invite -->
+<div class="admin-section">
+    <h2>Bulk Invite Players</h2>
+    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">
+        Send login emails to all active ladder players who haven't logged in yet. Players who already received an invite will be skipped.
+    </p>
+    <form method="POST" action="{{ url_for('admin_bulk_invite') }}"
+          onsubmit="return confirm('This will send welcome emails with login links to all players who haven\'t logged in yet. Continue?')">
+        <button type="submit" class="btn btn-primary">Send Invite Emails</button>
+    </form>
 </div>
 
 <!-- CSV Import -->
