@@ -38,7 +38,7 @@ BRANDS = {
         'APP_TAGLINE': 'Cedar Park Tennis Ladder',
         'APP_LOGO_LEFT': 'Cedar Park',
         'APP_LOGO_RIGHT': 'Tennis',
-        'EMAIL_FROM': 'Cedar Park Tennis Ladder <noreply@cedarparktennisladder.com>',
+        'EMAIL_FROM': 'Cedar Park Tennis Ladder <noreply@rallyrung.com>',
         'IS_HUB': False,
     },
     'texastennisladder.com': {
@@ -47,7 +47,7 @@ BRANDS = {
         'APP_TAGLINE': 'Competitive Tennis Ladders Across Texas',
         'APP_LOGO_LEFT': 'TX Tennis ',
         'APP_LOGO_RIGHT': 'Ladder',
-        'EMAIL_FROM': 'Texas Tennis Ladder <noreply@texastennisladder.com>',
+        'EMAIL_FROM': 'Texas Tennis Ladder <noreply@rallyrung.com>',
         'IS_HUB': True,
     },
 }
