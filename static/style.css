@@ -53,16 +53,17 @@ header {
 nav {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 12px;
     flex-wrap: wrap;
 }
 
 .logo {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.4rem;
+    font-size: 1.2rem;
     font-weight: 700;
     color: var(--text);
     letter-spacing: -0.5px;
+    white-space: nowrap;
 }
 
 .logo-accent { color: var(--accent); }
@@ -70,16 +71,17 @@ nav {
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
     flex: 1;
 }
 
 .nav-links a, .nav-links .nav-dropdown-toggle {
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-weight: 500;
     padding: 4px 0;
     transition: color 0.2s;
+    white-space: nowrap;
 }
 
 .nav-links a:hover, .nav-links a.active, .nav-links .nav-dropdown-toggle:hover { color: var(--accent); }
@@ -97,14 +99,14 @@ nav {
 }
 
 .user-avatar {
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     object-fit: cover;
 }
 
 .user-name {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-muted);
 }
 
@@ -173,8 +175,8 @@ nav {
 
 .logout-btn {
     color: var(--text-muted);
-    font-size: 0.8rem;
-    padding: 4px 10px;
+    font-size: 0.75rem;
+    padding: 3px 8px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
 }
