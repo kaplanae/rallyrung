@@ -53,7 +53,7 @@ BRANDS = {
 }
 
 BRANDS['localhost'] = BRANDS['texastennisladder.com']
-BRANDS['64.181.207.26'] = BRANDS['cedarparktennisladder.com']
+BRANDS['64.181.207.26'] = BRANDS['texastennisladder.com']
 
 DEFAULT_BRAND = BRANDS['rallyrung.com']
 
