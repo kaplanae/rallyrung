@@ -14,7 +14,7 @@
                 {% else %}
                     <option value="">Select opponent...</option>
                     {% for opp in opponents %}
-                        <option value="{{ opp.id }}">{{ opp.username }}</option>
+                        <option value="{{ opp.id }}" {{ 'selected' if opp.id == preselect_opponent }}>{{ opp.username }}</option>
                     {% endfor %}
                 {% endif %}
             </select>

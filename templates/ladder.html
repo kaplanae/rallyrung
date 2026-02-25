@@ -57,7 +57,8 @@
                     {% if r.score %}
                         {{ r.score }}
                     {% elif current_user.is_authenticated and r.opponent and (r.player.id == current_user.id or r.opponent.id == current_user.id) %}
-                        <a href="{{ url_for('my_group') }}" class="btn btn-sm btn-primary" style="padding: 3px 8px; font-size: 0.7rem;">Report Score</a>
+                        {% set opp_id = r.opponent.id if r.player.id == current_user.id else r.player.id %}
+                        <a href="{{ url_for('submit_result', opponent_id=opp_id) }}" class="btn btn-sm btn-primary" style="padding: 3px 8px; font-size: 0.7rem;">Report Score</a>
                     {% endif %}
                 </td>
             </tr>

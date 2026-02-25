@@ -2009,7 +2009,9 @@ def submit_result():
         return redirect(url_for('my_group'))
 
     conn.close()
-    return render_template('submit_result.html', group=group, opponents=opponents)
+    preselect_opponent = request.args.get('opponent_id', type=int)
+    return render_template('submit_result.html', group=group, opponents=opponents,
+                           preselect_opponent=preselect_opponent)
 
 
 @app.route('/confirm-match/<int:match_id>', methods=['POST'])
