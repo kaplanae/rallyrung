@@ -803,18 +803,67 @@ footer {
     font-style: italic;
 }
 
+/* ============ HUB PAGE ============ */
+.hub-hero {
+    text-align: center;
+    padding: 28px 0 12px;
+}
+
+.hub-hero h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+}
+
+.hub-hero h1 .accent { color: var(--accent); }
+
+.hub-hero p {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+}
+
+.hub-steps {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin: 16px 0 24px;
+    flex-wrap: wrap;
+}
+
+.hub-step {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.hub-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.75rem;
+    margin-right: 4px;
+}
+
 /* ============ HUB LADDER GRID ============ */
 .hub-ladder-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
 }
 
 .hub-ladder-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 24px 20px;
+    padding: 16px 14px;
     text-align: center;
     transition: border-color 0.2s, background 0.2s;
     text-decoration: none;
@@ -828,25 +877,25 @@ footer {
     color: var(--text);
 }
 
-.hub-ladder-icon {
-    font-size: 2rem;
-    margin-bottom: 10px;
-}
-
 .hub-ladder-card h3 {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .hub-ladder-card p {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-muted);
     margin: 0;
 }
 
 .hub-ladder-coming-soon {
-    opacity: 0.5;
+    opacity: 0.45;
     pointer-events: none;
+}
+
+@media (max-width: 600px) {
+    .hub-ladder-grid { grid-template-columns: 1fr; }
+    .hub-steps { gap: 12px; }
 }
