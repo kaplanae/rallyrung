@@ -1530,6 +1530,11 @@ def rules():
     return render_template('rules.html')
 
 
+@app.route('/courts')
+def courts():
+    return render_template('courts.html')
+
+
 @app.route('/contact', methods=['GET', 'POST'])
 @login_required
 def contact():

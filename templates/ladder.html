@@ -54,7 +54,11 @@
                     {% endif %}
                 </td>
                 <td style="font-size: 0.85rem; font-weight: 500;">
-                    {{ r.score or '' }}
+                    {% if r.score %}
+                        {{ r.score }}
+                    {% elif current_user.is_authenticated and r.opponent and (r.player.id == current_user.id or r.opponent.id == current_user.id) %}
+                        <a href="{{ url_for('my_group') }}" class="btn btn-sm btn-primary" style="padding: 3px 8px; font-size: 0.7rem;">Report Score</a>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
