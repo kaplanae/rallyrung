@@ -2,39 +2,72 @@
 {% block title %}{{ brand.APP_NAME }} — Competitive Tennis Ladder{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1>Climb the <span class="accent">Ladder</span></h1>
-    <p class="subtitle">{{ brand.APP_NAME }} is a monthly tennis ladder. Get grouped, play round robin, and climb the ranks based on your results.</p>
-
-    {% if current_user.is_authenticated %}
-        <a href="{{ url_for('ladder') }}" class="btn btn-primary">View Ladder</a>
+<div class="hub-hero">
+    <h1>{{ brand.APP_LOGO_LEFT }}<span class="accent">{{ brand.APP_LOGO_RIGHT }}</span></h1>
+    <p>{{ brand.APP_NAME }} is a competitive tennis ladder for local players 18 and over. Play matches on your own schedule — no required match days or weekly commitments.</p>
+    {% if not current_user.is_authenticated %}
+    <a href="{{ url_for('login') }}" class="btn btn-primary" style="margin-top: 16px;">Create My Profile Now</a>
     {% else %}
-        <a href="{{ url_for('login') }}" class="btn btn-primary" style="font-size: 1rem; padding: 14px 28px;">
-            Get Started
-        </a>
+    <a href="{{ url_for('ladder') }}" class="btn btn-primary" style="margin-top: 16px;">View Ladder</a>
     {% endif %}
 </div>
 
-<div class="how-it-works">
-    <div class="step">
-        <div class="step-number">1</div>
-        <h3>Join the Ladder</h3>
-        <p>Sign up and get placed on the ladder based on your skill level.</p>
+<div class="hub-steps">
+    <div class="hub-step"><span class="hub-step-num">1</span> Create a Profile</div>
+    <div class="hub-step"><span class="hub-step-num">2</span> Join the Ladder</div>
+    <div class="hub-step"><span class="hub-step-num">3</span> Play Matches</div>
+    <div class="hub-step"><span class="hub-step-num">4</span> Climb the Ranks</div>
+</div>
+
+{% if recent_matches %}
+<div class="hub-ticker-wrap">
+    <div class="hub-ticker" id="hub-ticker">
+        {% for m in recent_matches %}
+        <div class="hub-ticker-item">
+            <span class="hub-ticker-players">{{ m.p1_name }} vs {{ m.p2_name }}</span>
+            <span class="hub-ticker-score">{{ m.score }}</span>
+        </div>
+        {% endfor %}
     </div>
-    <div class="step">
-        <div class="step-number">2</div>
-        <h3>Play Your Group</h3>
-        <p>Each month you're grouped with 2 nearby players for round robin matches.</p>
+</div>
+{% endif %}
+
+<div class="hub-ladder-grid" style="grid-template-columns: repeat(2, 1fr);">
+    <div class="hub-ladder-card" style="pointer-events:none; text-align: left;">
+        <h3>Monthly Groups</h3>
+        <p>Each month you're grouped with nearby players for round robin matches.</p>
     </div>
-    <div class="step">
-        <div class="step-number">3</div>
+    <div class="hub-ladder-card" style="pointer-events:none; text-align: left;">
         <h3>Submit Scores</h3>
         <p>Log your set scores after each match. Your opponent confirms the result.</p>
     </div>
-    <div class="step">
-        <div class="step-number">4</div>
-        <h3>Move Up or Down</h3>
-        <p>Win both matches to climb a rung. Lose both and you drop one. Ties are broken by games won.</p>
+    <div class="hub-ladder-card" style="pointer-events:none; text-align: left;">
+        <h3>Climb or Drop</h3>
+        <p>Win both matches to climb a rung. Lose both and you drop. Ties broken by games won.</p>
+    </div>
+    <div class="hub-ladder-card" style="pointer-events:none; text-align: left;">
+        <h3>Play Your Way</h3>
+        <p>No required match days — coordinate with your group and play on your own schedule.</p>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if recent_matches %}
+<script>
+(function() {
+    var ticker = document.getElementById('hub-ticker');
+    if (!ticker) return;
+    var items = ticker.children;
+    if (items.length <= 1) return;
+    var idx = 0;
+    for (var i = 1; i < items.length; i++) items[i].style.display = 'none';
+    setInterval(function() {
+        items[idx].style.display = 'none';
+        idx = (idx + 1) % items.length;
+        items[idx].style.display = '';
+    }, 4000);
+})();
+</script>
+{% endif %}
 {% endblock %}

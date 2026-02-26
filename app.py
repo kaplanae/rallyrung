@@ -20,7 +20,7 @@ load_dotenv()
 
 resend.api_key = os.environ.get('RESEND_API_KEY')
 
-ADMIN_EMAILS = ['kaplanae@gmail.com']
+ADMIN_EMAILS = ['kaplanae@gmail.com', 'darrelljpark@gmail.com']
 
 BRANDS = {
     'rallyrung.com': {
@@ -1509,7 +1509,33 @@ def index():
             r['score'] = ', '.join(sets) if sets else 'Win'
             recent_matches.append(r)
         return render_template('hub_index.html', ladders=ladders, recent_matches=recent_matches)
-    return render_template('index.html')
+    # Non-hub: fetch recent confirmed matches for the ticker
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''
+        SELECT m.set1_p1, m.set1_p2, m.set2_p1, m.set2_p2, m.set3_p1, m.set3_p2,
+               u1.username as p1_name, u2.username as p2_name
+        FROM matches m
+        JOIN monthly_groups mg ON m.group_id = mg.id
+        JOIN users u1 ON m.player1_id = u1.id
+        JOIN users u2 ON m.player2_id = u2.id
+        WHERE m.status = 'confirmed'
+        ORDER BY m.created_at DESC
+        LIMIT 20
+    ''')
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    recent_matches = []
+    for r in rows:
+        sets = []
+        for s in range(1, 4):
+            sp1 = r.get(f'set{s}_p1')
+            sp2 = r.get(f'set{s}_p2')
+            if sp1 is not None:
+                sets.append(f"{sp1}-{sp2}")
+        r['score'] = ', '.join(sets) if sets else 'Win'
+        recent_matches.append(r)
+    return render_template('index.html', recent_matches=recent_matches)
 
 
 @app.route('/rules')
@@ -2875,15 +2901,15 @@ def admin_bulk_invite():
 
         link = url_for('magic_login', token=token, _external=True)
         email_sent = send_email(p['email'],
-            f"Welcome to the {ladder_name} Tennis Ladder on {get_brand()['APP_NAME']}!",
+            f"{ladder_name} Tennis Ladder — Your New Account Is Ready",
             email_wrap(f'''
                 <p>Hi {p['username']},</p>
-                <p>Your account on the <strong>{ladder_name}</strong> tennis ladder is ready on <strong>{get_brand()['APP_NAME']}</strong>.</p>
-                <p>Your account is already set up at <strong>rank #{p['ranking']}</strong>. Just click below to log in and claim it:</p>
+                <p>The <strong>{ladder_name} Tennis Ladder</strong> has moved to a new platform! Your account has been set up and your <strong>rank #{p['ranking']}</strong> has been preserved.</p>
+                <p>Click below to claim your account. You'll be able to set your own password, view the ladder, and report scores — all from your phone or computer.</p>
                 <p><a href="{link}" style="display:inline-block;padding:14px 28px;background:#2ecc71;color:#000;
-                border-radius:6px;font-weight:700;text-decoration:none;font-size:1rem;">Log In to {get_brand()['APP_NAME']}</a></p>
-                <p style="color:#999;font-size:13px;">This link is unique to you — don't share it. Once you log in, you can set a password or link your Google account.</p>
-            ''', f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
+                border-radius:6px;font-weight:700;text-decoration:none;font-size:1rem;">Claim My Account</a></p>
+                <p style="color:#999;font-size:13px;">This link is unique to you — don't share it. It only works once.</p>
+            ''', f"{ladder_name} Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
         if email_sent:
             sent += 1
@@ -3099,6 +3125,8 @@ def admin_delete_user():
     cur.execute(f'DELETE FROM users WHERE id = {ph}', (user_id,))
     conn.commit()
     conn.close()
+    send_email(ADMIN_EMAILS, f"Player deleted: {username}",
+               email_wrap(f"<p><strong>{current_user.username}</strong> deleted player <strong>{username}</strong> (ID {user_id}).</p>"))
     flash(f'User "{username}" deleted.')
     return redirect(url_for('admin'))
 
