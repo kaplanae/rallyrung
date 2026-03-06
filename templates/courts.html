@@ -1,10 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Approved Courts — {{ brand.APP_NAME }}{% endblock %}
+{% block title %}Court Locations — {{ brand.APP_NAME }}{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Approved Court Locations</h1>
+<h1 class="page-title">Court Locations</h1>
 
-<p style="color: var(--text-muted); margin-bottom: 20px;">All ladder matches must be played at one of the following approved courts in the Cedar Park area. Click a court name to view it on Google Maps.</p>
+{% if is_hub and not current_ladder_name %}
+{# ===== GENERIC TTL COURTS PAGE ===== #}
+<div class="card" style="padding: 24px; line-height: 1.7;">
+    <p>Each Texas Tennis Ladder has its own set of approved courts where all matches must be played. Players are not to suggest playing on courts that are not listed for their specific ladder.</p>
+    <p style="margin-top: 16px;">To see the approved court locations for a ladder, select a ladder from the <strong>Find a Ladder</strong> menu above.</p>
+</div>
+
+{% else %}
+{# ===== CEDAR PARK SPECIFIC COURTS ===== #}
+<p style="color: var(--text-muted); margin-bottom: 20px;">The following are suggested courts in the Cedar Park area. Click a court name to view it on Google Maps.</p>
 
 <div class="card">
     <ul style="padding-left: 20px; line-height: 2.2;">
@@ -24,5 +33,7 @@
     </ul>
 </div>
 
-<p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 16px;">Do not suggest playing on courts other than the courts listed above.</p>
+<p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 16px;">These are recommended local courts — players may agree to play at any mutually convenient location.</p>
+{% endif %}
+
 {% endblock %}

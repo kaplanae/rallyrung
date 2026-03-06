@@ -19,27 +19,50 @@
                 </button>
                 <div class="nav-links">
                     {% if is_hub %}
+                        {% if current_ladder_name %}
+                        <a href="{{ url_for('index') }}">Texas Tennis Ladder</a>
+                        <span style="color: var(--text-muted); font-size: 0.85rem;">›</span>
+                        <span style="color: var(--text); font-size: 0.9rem; font-weight: 500;">{{ current_ladder_name }}</span>
+                        {% else %}
+                        <div class="nav-dropdown">
+                            <a href="#" class="nav-dropdown-toggle" onclick="event.preventDefault(); this.parentElement.classList.toggle('open');">Find a Ladder &#9662;</a>
+                            <div class="nav-dropdown-menu">
+                                {% for l in hub_ladders %}
+                                <a href="{{ url_for('ladder_deeplink', ladder_id=l.id) }}">{{ l.name }} {{ l.ladder_type|default('Singles', true)|title }}</a>
+                                {% endfor %}
+                                <span class="nav-dropdown-coming-soon">Steiner Ranch Singles — Coming Soon</span>
+                                <div class="nav-dropdown-sep"></div>
+                                <a href="{{ url_for('request_ladder') }}">Request a Ladder</a>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                    {% if user_ladders_nav|length > 1 %}
                     <div class="nav-dropdown">
-                        <a href="#" class="nav-dropdown-toggle" onclick="event.preventDefault(); this.parentElement.classList.toggle('open');">Find a Ladder &#9662;</a>
+                        <a href="#" class="nav-dropdown-toggle" onclick="event.preventDefault(); this.parentElement.classList.toggle('open');">
+                            {{ current_ladder_name or 'My Ladders' }} &#9662;
+                        </a>
                         <div class="nav-dropdown-menu">
-                            {% for l in hub_ladders %}
-                            <a href="{{ url_for('ladder_deeplink', ladder_id=l.id) }}">{{ l.name }} {{ l.ladder_type|default('Singles', true)|title }}</a>
+                            {% for ul in user_ladders_nav %}
+                            <a href="{{ url_for('switch_ladder', ladder_id=ul.ladder_id) }}">
+                                {{ ul.ladder_name }} {{ ul.ladder_type|default('Singles', true)|title }}
+                            </a>
                             {% endfor %}
-                            <span class="nav-dropdown-coming-soon">Steiner Ranch Singles — Coming Soon</span>
-                            <div class="nav-dropdown-sep"></div>
-                            <a href="{{ url_for('request_ladder') }}">Request a Ladder</a>
                         </div>
                     </div>
                     {% else %}
                     <a href="{{ url_for('ladder') }}">Ladder</a>
                     {% endif %}
+                    {% endif %}
                     <a href="{{ url_for('rules') }}">Rules</a>
-                    <a href="{{ url_for('courts') }}">Courts</a>
+                    {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('courts') }}">Court Locations</a>
+                    {% endif %}
                     {% if current_user.is_authenticated %}
                         <a href="{{ url_for('my_group') }}">My Group</a>
                         <a href="{{ url_for('availability') }}">Availability</a>
                         <a href="{{ url_for('profile') }}">Profile</a>
-                        {% if current_user.is_admin %}
+                        {% if is_any_admin %}
                             <a href="{{ url_for('admin') }}">Admin</a>
                         {% endif %}
                     {% endif %}

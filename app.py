@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from calendar import monthrange
 from collections import defaultdict
 import os
+import re
 import uuid
 import resend
 from dotenv import load_dotenv
@@ -132,16 +133,41 @@ def get_placeholder():
     return '%s' if USE_POSTGRES else '?'
 
 
+def html_to_text(html):
+    """Convert simple HTML email body to plain text."""
+    html = re.sub(r'<(style|script)[^>]*>.*?</\1>', '', html, flags=re.DOTALL)
+    html = re.sub(r'<br\s*/?>', '\n', html)
+    html = re.sub(r'</p>', '\n\n', html)
+    html = re.sub(r'<li>', '- ', html)
+    html = re.sub(r'</li>', '\n', html)
+    html = re.sub(r'<h[1-6][^>]*>', '\n', html)
+    html = re.sub(r'</h[1-6]>', '\n', html)
+    html = re.sub(r'<a [^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', r'\2: \1', html)
+    html = re.sub(r'<[^>]+>', '', html)
+    html = html.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') \
+               .replace('&middot;', '·').replace('&rarr;', '→').replace('&nbsp;', ' ') \
+               .replace('&#8212;', '—').replace('&mdash;', '—')
+    html = re.sub(r'\n{3,}', '\n\n', html)
+    return html.strip()
+
+
 def send_email(to, subject, html):
     """Send an email via Resend. Skips silently if no API key (dev mode)."""
     if not resend.api_key:
         return False
     try:
+        domain = get_brand()['APP_DOMAIN']
         resend.Emails.send({
             "from": get_brand()['EMAIL_FROM'],
+            "reply_to": f"support@{domain}",
             "to": [to] if isinstance(to, str) else to,
             "subject": subject,
-            "html": html
+            "html": html,
+            "text": html_to_text(html),
+            "headers": {
+                "List-Unsubscribe": f"<mailto:unsubscribe@{domain}>",
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            }
         })
         return True
     except Exception as e:
@@ -151,13 +177,17 @@ def send_email(to, subject, html):
 
 def email_wrap(body_html, footer_text=None):
     """Wrap email body in a consistent layout."""
+    brand = get_brand()
     if footer_text is None:
-        footer_text = f"{get_brand()['APP_TAGLINE']} — {get_brand()['APP_DOMAIN']}"
-    return f'''<div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto;">
-  <h2 style="color: #e74c3c;">{get_brand()['APP_NAME']}</h2>
+        footer_text = f"{brand['APP_TAGLINE']} — {brand['APP_DOMAIN']}"
+    domain = brand['APP_DOMAIN']
+    return f'''<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; color: #222;">
+  <h2 style="color: #e74c3c; margin-bottom: 20px;">{brand['APP_NAME']}</h2>
   {body_html}
-  <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
-  <p style="color: #999; font-size: 12px;">{footer_text}</p>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 28px 0;">
+  <p style="color: #999; font-size: 12px; line-height: 1.6;">{footer_text}<br>
+  You received this because you have an account on {domain}.
+  To unsubscribe, reply with "unsubscribe" to this email.</p>
 </div>'''
 
 
@@ -330,6 +360,12 @@ def init_db():
             status TEXT DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+
+        cur.execute('''CREATE TABLE IF NOT EXISTS ladder_admins (
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            ladder_id INTEGER NOT NULL REFERENCES ladders(id),
+            PRIMARY KEY (user_id, ladder_id)
+        )''')
     else:
         cur.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -435,6 +471,12 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        cur.execute('''CREATE TABLE IF NOT EXISTS ladder_admins (
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            ladder_id INTEGER NOT NULL REFERENCES ladders(id),
+            PRIMARY KEY (user_id, ladder_id)
+        )''')
+
     # Migrations: add columns if missing (idempotent)
     try:
         cur.execute("ALTER TABLE matches ADD COLUMN outcome_type TEXT DEFAULT 'completed'")
@@ -458,6 +500,11 @@ def init_db():
         conn.rollback()
     try:
         cur.execute("ALTER TABLE matches ADD COLUMN set3_tb TEXT")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    try:
+        cur.execute("ALTER TABLE matches ADD COLUMN dispute_notes TEXT")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -500,6 +547,16 @@ def init_db():
         cur.execute(f"UPDATE ladders SET name = 'Cedar Park' WHERE name = 'RallyRung Tennis Ladder'")
         # Backfill city/ladder_type on existing Cedar Park row
         cur.execute("UPDATE ladders SET city = 'Cedar Park', ladder_type = 'singles' WHERE name = 'Cedar Park' AND (city IS NULL OR city = '')")
+
+    # Cedar Park Doubles
+    cur.execute("SELECT id FROM ladders WHERE name='Cedar Park' AND ladder_type='doubles'")
+    if not cur.fetchone():
+        cur.execute("INSERT INTO ladders (name, sport, city, ladder_type) VALUES ('Cedar Park','tennis','Cedar Park','doubles')")
+
+    # Steiner Ranch Singles
+    cur.execute("SELECT id FROM ladders WHERE name='Steiner Ranch'")
+    if not cur.fetchone():
+        cur.execute("INSERT INTO ladders (name, sport, city, ladder_type) VALUES ('Steiner Ranch','tennis','Steiner Ranch','singles')")
 
     conn.commit()
 
@@ -749,7 +806,7 @@ def get_all_ladders():
     """Get all available ladders."""
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('SELECT * FROM ladders ORDER BY id ASC')
+    cur.execute('SELECT * FROM ladders ORDER BY name ASC, ladder_type ASC')
     ladders = [dict(r) for r in cur.fetchall()]
     conn.close()
     return ladders
@@ -816,7 +873,7 @@ def get_or_create_user_by_google(google_id, email, name, picture):
 
 
 def require_admin(f):
-    """Decorator to require admin access."""
+    """Decorator to require global admin access."""
     from functools import wraps
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -827,13 +884,68 @@ def require_admin(f):
     return decorated
 
 
+def get_admin_ladder_ids(user_id):
+    """Return list of ladder_ids this user is a ladder-specific admin for."""
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'SELECT ladder_id FROM ladder_admins WHERE user_id = {ph}', (user_id,))
+    result = [dict(r)['ladder_id'] for r in cur.fetchall()]
+    conn.close()
+    return result
+
+
+def is_ladder_admin(user_id, ladder_id):
+    """Return True if user is a ladder-specific admin for this ladder."""
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'SELECT 1 FROM ladder_admins WHERE user_id = {ph} AND ladder_id = {ph}', (user_id, ladder_id))
+    result = cur.fetchone()
+    conn.close()
+    return result is not None
+
+
+def require_ladder_admin(f):
+    """Decorator: pass if global admin OR ladder-specific admin for the current ladder."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            flash('Login required.')
+            return redirect(url_for('login'))
+        if current_user.is_admin:
+            return f(*args, **kwargs)
+        ladder_id = get_ladder_id()
+        if ladder_id and is_ladder_admin(current_user.id, ladder_id):
+            return f(*args, **kwargs)
+        flash('Admin access required.')
+        return redirect(url_for('index'))
+    return decorated
+
+
 @app.context_processor
 def inject_ladder_context():
-    """Inject current ladder name into all templates."""
+    """Inject current ladder name and user's active ladders into all templates."""
     ladder_id = session.get('ladder_id')
+    ctx = {'current_ladder_name': '', 'user_ladders_nav': [], 'is_any_admin': False}
     if ladder_id:
-        return {'current_ladder_name': get_ladder_name(ladder_id)}
-    return {'current_ladder_name': ''}
+        ctx['current_ladder_name'] = get_ladder_name(ladder_id)
+    if current_user.is_authenticated:
+        conn = get_db()
+        cur = conn.cursor()
+        ph = get_placeholder()
+        cur.execute(f'''
+            SELECT lp.ladder_id, l.name as ladder_name, l.ladder_type
+            FROM ladder_players lp
+            JOIN ladders l ON lp.ladder_id = l.id
+            WHERE lp.user_id = {ph} AND lp.is_active = {ph}
+            ORDER BY l.id ASC
+        ''', (current_user.id, True if USE_POSTGRES else 1))
+        ctx['user_ladders_nav'] = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        ctx['is_any_admin'] = current_user.is_admin or bool(get_admin_ladder_ids(current_user.id))
+    return ctx
 
 
 def validate_set_score(p1, p2):
@@ -1169,7 +1281,7 @@ def signup():
     login_user(user)
 
     # Send welcome email
-    send_email(email, f"Welcome to {get_brand()['APP_NAME']}!", email_wrap(f'''
+    send_email(email, f"Welcome to {get_brand()['APP_NAME']}", email_wrap(f'''
         <p>Hi {username},</p>
         <p>Welcome to {get_brand()['APP_NAME']}! Your account has been created.</p>
         <p>Head to your <a href="{url_for('profile', _external=True)}">profile</a> to complete your setup and join a ladder.</p>
@@ -1363,33 +1475,39 @@ def magic_login(token):
         return redirect(url_for('index'))
 
     row = dict(row)
-    if row.get('used') if USE_POSTGRES else row.get('used'):
-        conn.close()
-        flash('This login link has already been used.')
-        return redirect(url_for('index'))
 
     if datetime.utcnow() > row['expires_at']:
         conn.close()
         flash('This login link has expired.')
         return redirect(url_for('index'))
 
+    # Find the user by email first
+    cur.execute(f'SELECT * FROM users WHERE email = {ph}', (row['email'],))
+    user_row = cur.fetchone()
+    if not user_row:
+        conn.close()
+        flash('No account found for this email.')
+        return redirect(url_for('index'))
+
+    user_row = dict(user_row)
+
+    # If the token was already used, allow it only if the account was never set up
+    # (e.g. VPN blocked the response on first attempt so they never actually logged in)
+    already_used = row.get('used') if USE_POSTGRES else bool(row.get('used'))
+    account_activated = bool(user_row.get('password_hash')) or bool(user_row.get('google_id'))
+    if already_used and account_activated:
+        conn.close()
+        flash('This login link has already been used. Please use the login page or request a new link.')
+        return redirect(url_for('login'))
+
     # Mark token as used
     if USE_POSTGRES:
         cur.execute(f'UPDATE magic_tokens SET used = TRUE WHERE id = {ph}', (row['id'],))
     else:
         cur.execute(f'UPDATE magic_tokens SET used = 1 WHERE id = {ph}', (row['id'],))
-
-    # Find the user by email
-    cur.execute(f'SELECT * FROM users WHERE email = {ph}', (row['email'],))
-    user_row = cur.fetchone()
     conn.commit()
     conn.close()
 
-    if not user_row:
-        flash('No account found for this email.')
-        return redirect(url_for('index'))
-
-    user_row = dict(user_row)
     user = User(
         id=user_row['id'], username=user_row['username'],
         email=user_row.get('email'), google_id=user_row.get('google_id'),
@@ -1401,14 +1519,12 @@ def magic_login(token):
         birth_year=user_row.get('birth_year')
     )
     login_user(user)
-    flash(f'Welcome, {user.username}!')
+    flash(f'Welcome, {user.username}! Please verify your contact info and set a password below.')
     # Set ladder in session based on membership
     user_ladders = get_user_ladders(user.id)
     if user_ladders:
         session['ladder_id'] = user_ladders[0]['id']
-        return redirect(url_for('ladder'))
-    else:
-        return redirect(url_for('choose_ladder'))
+    return redirect(url_for('profile'))
 
 
 @app.route('/logout')
@@ -1479,6 +1595,7 @@ def api_me():
 @app.route('/')
 def index():
     if get_brand().get('IS_HUB'):
+        session.pop('ladder_id', None)  # Clear ladder context when returning to hub home
         ladders = get_all_ladders()
         # Fetch recent confirmed matches for the ticker
         conn = get_db()
@@ -1544,6 +1661,7 @@ def rules():
 
 
 @app.route('/courts')
+@login_required
 def courts():
     return render_template('courts.html')
 
@@ -1575,6 +1693,7 @@ def request_ladder():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         email = request.form.get('email', '').strip()
+        phone = request.form.get('phone', '').strip()
         city = request.form.get('city', '').strip()
         comments = request.form.get('comments', '').strip()
         if not name or not email or not city:
@@ -1586,6 +1705,7 @@ def request_ladder():
             email_wrap(f'''<p><strong>New Ladder Request</strong></p>
 <p><strong>Name:</strong> {name}</p>
 <p><strong>Email:</strong> {email}</p>
+<p><strong>Phone:</strong> {phone or '—'}</p>
 <p><strong>City:</strong> {city}</p>
 <hr style="border: none; border-top: 1px solid #eee;">
 <p>{comments.replace(chr(10), "<br>") if comments else "(no comments)"}</p>''')
@@ -1692,8 +1812,10 @@ def ladder():
                 'games_won': pg['games_won'], 'games_lost': pg['games_lost']}
 
     ladder_groups = []
-    for i in range(0, len(players), 3):
-        gp = players[i:i+3]
+    for g in groups:
+        pids = [g['player1_id'], g['player2_id'], g.get('player3_id')]
+        gp = [player_map[pid] for pid in pids if pid and pid in player_map]
+        gp.sort(key=lambda p: p['ranking'])
         rows = []
         if len(gp) == 3:
             rows.append(make_row(gp[0], gp[1]))
@@ -1704,19 +1826,21 @@ def ladder():
             rows.append(make_row(gp[1], gp[0]))
         elif len(gp) == 1:
             rows.append(make_row(gp[0], None))
-        ladder_groups.append({'number': i // 3 + 1, 'rows': rows})
+        ladder_groups.append({'number': g['group_number'], 'rows': rows})
 
-    # Check if current user is a member of this ladder
-    is_member = False
+    # Check current user's membership for this ladder
+    user_ladder_player = None
     if current_user.is_authenticated:
-        player_ids = [p['id'] for p in players]
-        is_member = current_user.id in player_ids
+        cur.execute(f'SELECT * FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
+                    (current_user.id, ladder_id))
+        row = cur.fetchone()
+        user_ladder_player = dict(row) if row else None
 
     conn.close()
     ladder_name = get_ladder_name(ladder_id)
     return render_template('ladder.html', players=players, ladder_groups=ladder_groups,
                            groups=groups, month=month, year=year, ladder_name=ladder_name,
-                           is_member=is_member)
+                           user_ladder_player=user_ladder_player, ladder_id=ladder_id)
 
 
 @app.route('/my-group')
@@ -1866,6 +1990,7 @@ def submit_result():
             opponents.append(dict(opp))
 
     if request.method == 'POST':
+        edit_match_id = int(request.form.get('edit_match_id', 0)) or None
         opponent_id = int(request.form.get('opponent_id', 0))
         outcome_type = request.form.get('outcome_type', 'completed')
         valid_outcomes = ('completed', 'forfeit', 'schedule_problem', 'weather_problem',
@@ -1966,16 +2091,17 @@ def submit_result():
                     conn.close()
                     return redirect(url_for('submit_result'))
 
-        # Check for duplicate submission
-        cur.execute(f'''
-            SELECT id FROM matches WHERE group_id = {ph}
-              AND ((player1_id = {ph} AND player2_id = {ph}) OR (player1_id = {ph} AND player2_id = {ph}))
-        ''', (group['id'], current_user.id, opponent_id, opponent_id, current_user.id))
-        existing = cur.fetchone()
-        if existing:
-            flash('A match result already exists for this matchup. It may need confirmation.')
-            conn.close()
-            return redirect(url_for('my_group'))
+        # Check for duplicate submission (skip when editing existing match)
+        if not edit_match_id:
+            cur.execute(f'''
+                SELECT id FROM matches WHERE group_id = {ph}
+                  AND ((player1_id = {ph} AND player2_id = {ph}) OR (player1_id = {ph} AND player2_id = {ph}))
+            ''', (group['id'], current_user.id, opponent_id, opponent_id, current_user.id))
+            existing = cur.fetchone()
+            if existing:
+                flash('A match result already exists for this matchup. It may need confirmation.')
+                conn.close()
+                return redirect(url_for('my_group'))
 
         # Parse set tiebreak scores
         set1_tb = request.form.get('set1_tb', '').strip() or None
@@ -2007,24 +2133,82 @@ def submit_result():
                 if len(parts) == 2:
                     set3_tb = f"{parts[1]}-{parts[0]}"
 
-        cur.execute(f'''
-            INSERT INTO matches (group_id, player1_id, player2_id, winner_id,
-                set1_p1, set1_p2, set2_p1, set2_p2, set3_p1, set3_p2,
-                set1_tb, set2_tb, set3_tb,
-                submitted_by, status, outcome_type)
-            VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, 'pending', {ph})
-        ''', (group['id'], p1_id, p2_id, winner_id,
-              s1_p1, s1_p2, s2_p1, s2_p2, s3_p1, s3_p2,
-              set1_tb, set2_tb, set3_tb, current_user.id, outcome_type))
-        conn.commit()
-        conn.close()
-        flash('Match result submitted! Waiting for opponent to confirm.')
+        if edit_match_id:
+            cur.execute(f'''
+                UPDATE matches SET winner_id = {ph},
+                    set1_p1 = {ph}, set1_p2 = {ph}, set2_p1 = {ph}, set2_p2 = {ph},
+                    set3_p1 = {ph}, set3_p2 = {ph},
+                    set1_tb = {ph}, set2_tb = {ph}, set3_tb = {ph},
+                    submitted_by = {ph}, status = 'pending', outcome_type = {ph}
+                WHERE id = {ph}
+            ''', (winner_id, s1_p1, s1_p2, s2_p1, s2_p2, s3_p1, s3_p2,
+                  set1_tb, set2_tb, set3_tb, current_user.id, outcome_type, edit_match_id))
+            conn.commit()
+            conn.close()
+            flash('Match result updated! Waiting for opponent to confirm.')
+        else:
+            cur.execute(f'''
+                INSERT INTO matches (group_id, player1_id, player2_id, winner_id,
+                    set1_p1, set1_p2, set2_p1, set2_p2, set3_p1, set3_p2,
+                    set1_tb, set2_tb, set3_tb,
+                    submitted_by, status, outcome_type)
+                VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, 'pending', {ph})
+            ''', (group['id'], p1_id, p2_id, winner_id,
+                  s1_p1, s1_p2, s2_p1, s2_p2, s3_p1, s3_p2,
+                  set1_tb, set2_tb, set3_tb, current_user.id, outcome_type))
+            conn.commit()
+            conn.close()
+            flash('Match result submitted! Waiting for opponent to confirm.')
         return redirect(url_for('my_group'))
 
+    # Pre-fill for edit mode
+    edit_match = None
+    edit_match_id = request.args.get('edit', type=int)
+    if edit_match_id:
+        cur.execute(f'SELECT * FROM matches WHERE id = {ph}', (edit_match_id,))
+        em = cur.fetchone()
+        if em:
+            em = dict(em)
+            if current_user.id in (em['player1_id'], em['player2_id']) and em['status'] == 'pending':
+                i_am_p1 = current_user.id == em['player1_id']
+                opp_id = em['player2_id'] if i_am_p1 else em['player1_id']
+                if i_am_p1:
+                    s1my, s1opp = em.get('set1_p1'), em.get('set1_p2')
+                    s2my, s2opp = em.get('set2_p1'), em.get('set2_p2')
+                    s3my, s3opp = em.get('set3_p1'), em.get('set3_p2')
+                    tb1, tb2, tb3 = em.get('set1_tb'), em.get('set2_tb'), em.get('set3_tb')
+                else:
+                    s1my, s1opp = em.get('set1_p2'), em.get('set1_p1')
+                    s2my, s2opp = em.get('set2_p2'), em.get('set2_p1')
+                    s3my, s3opp = em.get('set3_p2'), em.get('set3_p1')
+                    def flip_tb(tb):
+                        if not tb: return tb
+                        parts = tb.split('-')
+                        return f"{parts[1]}-{parts[0]}" if len(parts) == 2 else tb
+                    tb1 = flip_tb(em.get('set1_tb'))
+                    tb2 = flip_tb(em.get('set2_tb'))
+                    tb3 = flip_tb(em.get('set3_tb'))
+                edit_match = {
+                    'id': edit_match_id,
+                    'opponent_id': opp_id,
+                    'outcome_type': em.get('outcome_type') or 'completed',
+                    'winner_id': em.get('winner_id'),
+                    'set1_my': s1my, 'set1_opp': s1opp,
+                    'set2_my': s2my, 'set2_opp': s2opp,
+                    'set3_my': s3my, 'set3_opp': s3opp,
+                    'set1_tb': tb1, 'set2_tb': tb2, 'set3_tb': tb3,
+                }
+                # Ensure opponent appears in opponents list even if match already exists
+                if not any(o['id'] == opp_id for o in opponents):
+                    cur.execute(f'SELECT id, username FROM users WHERE id = {ph}', (opp_id,))
+                    opp_row = cur.fetchone()
+                    if opp_row:
+                        opponents.append(dict(opp_row))
+
     conn.close()
-    preselect_opponent = request.args.get('opponent_id', type=int)
+    preselect_opponent = edit_match['opponent_id'] if edit_match else request.args.get('opponent_id', type=int)
     return render_template('submit_result.html', group=group, opponents=opponents,
-                           preselect_opponent=preselect_opponent)
+                           preselect_opponent=preselect_opponent, edit_match=edit_match)
 
 
 @app.route('/confirm-match/<int:match_id>', methods=['POST'])
@@ -2091,9 +2275,63 @@ def dispute_match(match_id):
         flash('You are not a player in this match.')
         return redirect(url_for('my_group'))
 
-    cur.execute(f"UPDATE matches SET status = 'disputed' WHERE id = {ph}", (match_id,))
+    # Collect dispute details from modal form
+    dispute_score = request.form.get('dispute_score', '').strip()
+    dispute_notes_text = request.form.get('dispute_notes', '').strip()
+    parts = []
+    if dispute_score:
+        parts.append(f"Their score: {dispute_score}")
+    if dispute_notes_text:
+        parts.append(f"Notes: {dispute_notes_text}")
+    combined_notes = '\n'.join(parts) if parts else None
+
+    cur.execute(f"UPDATE matches SET status = 'disputed', dispute_notes = {ph} WHERE id = {ph}",
+                (combined_notes, match_id))
     conn.commit()
+
+    # Fetch player names and group/ladder info for email
+    cur.execute(f'''
+        SELECT u1.username as p1_name, u2.username as p2_name,
+               l.name as ladder_name
+        FROM matches m
+        JOIN users u1 ON u1.id = m.player1_id
+        JOIN users u2 ON u2.id = m.player2_id
+        JOIN monthly_groups mg ON mg.id = m.group_id
+        JOIN ladders l ON l.id = mg.ladder_id
+        WHERE m.id = {ph}
+    ''', (match_id,))
+    info = dict(cur.fetchone())
     conn.close()
+
+    # Build score string from match row
+    score_parts = []
+    if match.get('set1_p1') is not None:
+        score_parts.append(f"{match['set1_p1']}-{match['set1_p2']}")
+    if match.get('set2_p1') is not None:
+        score_parts.append(f"{match['set2_p1']}-{match['set2_p2']}")
+    if match.get('set3_p1') is not None:
+        score_parts.append(f"{match['set3_p1']}-{match['set3_p2']}")
+    original_score = ', '.join(score_parts) if score_parts else '(no score recorded)'
+
+    admin_url = url_for('admin_disputes', _external=True)
+    send_email(
+        ADMIN_EMAILS,
+        f"[Dispute] Match #{match_id} — {info['p1_name']} vs {info['p2_name']}",
+        email_wrap(f'''
+<p><strong>A match has been disputed.</strong></p>
+<table style="border-collapse:collapse;font-size:0.9rem;">
+  <tr><td style="padding:4px 12px 4px 0;color:#888;">Match ID</td><td>#{match_id}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#888;">Ladder</td><td>{info['ladder_name']}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#888;">Players</td><td>{info['p1_name']} vs {info['p2_name']}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#888;">Submitted score</td><td>{original_score}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#888;">Disputer</td><td>{current_user.username}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#888;">Their claimed score</td><td>{dispute_score or '—'}</td></tr>
+  <tr><td style="padding:4px 12px 4px 0;color:#888;">Notes</td><td>{dispute_notes_text or '—'}</td></tr>
+</table>
+<p style="margin-top:16px;"><a href="{admin_url}" style="display:inline-block;padding:10px 20px;background:#e74c3c;color:#fff;text-decoration:none;border-radius:4px;">Review Disputes →</a></p>
+''')
+    )
+
     flash('Match disputed. An admin will review.')
     return redirect(url_for('my_group'))
 
@@ -2113,9 +2351,9 @@ def delete_match(match_id):
         return redirect(url_for('my_group'))
 
     match = dict(match)
-    if current_user.id != match['submitted_by'] and not current_user.is_admin:
+    if current_user.id not in (match['player1_id'], match['player2_id']) and not current_user.is_admin:
         conn.close()
-        flash('Only the submitter or an admin can delete a match.')
+        flash('You are not a player in this match.')
         return redirect(url_for('my_group'))
 
     if match['status'] == 'confirmed' and not current_user.is_admin:
@@ -2170,20 +2408,90 @@ def profile():
     total_wins = sum(1 for m in match_history if m['winner_id'] == current_user.id)
     total_losses = len(match_history) - total_wins
 
+    # All ladders this user belongs to
+    cur.execute(f'''
+        SELECT lp.*, l.name as ladder_name, l.ladder_type, l.city
+        FROM ladder_players lp
+        JOIN ladders l ON lp.ladder_id = l.id
+        WHERE lp.user_id = {ph}
+        ORDER BY l.id ASC
+    ''', (current_user.id,))
+    user_ladders = [dict(r) for r in cur.fetchall()]
+
+    # Check if user has a password set
+    cur.execute(f'SELECT password_hash FROM users WHERE id = {ph}', (current_user.id,))
+    pw_row = cur.fetchone()
+    has_password = bool(pw_row and dict(pw_row).get('password_hash'))
+
     conn.close()
     all_ladders = get_all_ladders()
+    user_ladder_ids = {ul['ladder_id'] for ul in user_ladders}
+    available_to_join = [l for l in all_ladders if l['id'] not in user_ladder_ids]
     ladder_name = get_ladder_name(ladder_id)
     return render_template('profile.html', ladder_player=ladder_player,
                            match_history=match_history, ranking_history=ranking_history,
                            total_wins=total_wins, total_losses=total_losses,
                            all_ladders=all_ladders, ladder_name=ladder_name,
-                           current_ladder_id=ladder_id)
+                           current_ladder_id=ladder_id,
+                           user_ladders=user_ladders,
+                           available_to_join=available_to_join,
+                           has_password=has_password)
+
+
+@app.route('/player/<int:user_id>')
+def player_profile(user_id):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # Fetch the player
+    cur.execute(f'SELECT id, username, ntrp_rating, profile_picture, gender FROM users WHERE id = {ph}', (user_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return 'Player not found', 404
+    player = dict(row)
+
+    # All ladder memberships with rankings
+    cur.execute(f'''
+        SELECT lp.ranking, lp.is_active, lp.pending, l.id as ladder_id,
+               l.name as ladder_name, l.ladder_type
+        FROM ladder_players lp
+        JOIN ladders l ON lp.ladder_id = l.id
+        WHERE lp.user_id = {ph}
+        ORDER BY l.id ASC
+    ''', (user_id,))
+    player_ladders = [dict(r) for r in cur.fetchall()]
+
+    # Match history across all ladders
+    cur.execute(f'''
+        SELECT m.*, u1.username as p1_name, u2.username as p2_name,
+               mg.month, mg.year, mg.group_number
+        FROM matches m
+        JOIN users u1 ON m.player1_id = u1.id
+        JOIN users u2 ON m.player2_id = u2.id
+        JOIN monthly_groups mg ON m.group_id = mg.id
+        WHERE (m.player1_id = {ph} OR m.player2_id = {ph}) AND m.status = 'confirmed'
+        ORDER BY m.created_at DESC
+    ''', (user_id, user_id))
+    match_history = [dict(r) for r in cur.fetchall()]
+
+    conn.close()
+    total_wins = sum(1 for m in match_history if m['winner_id'] == user_id)
+    total_losses = len(match_history) - total_wins
+
+    return render_template('player_profile.html', player=player,
+                           player_ladders=player_ladders,
+                           match_history=match_history,
+                           total_wins=total_wins,
+                           total_losses=total_losses,
+                           viewed_user_id=user_id)
 
 
 @app.route('/ladder/join', methods=['POST'])
 @login_required
 def ladder_join():
-    ntrp_rating = request.form.get('ntrp_rating', '').strip()
+    ntrp_rating = request.form.get('ntrp_rating', '').strip() or (current_user.ntrp_rating or '')
     if not ntrp_rating:
         flash('Please select a tennis rating.')
         return redirect(url_for('profile'))
@@ -2202,11 +2510,21 @@ def ladder_join():
         flash('You are already on the ladder.')
         return redirect(url_for('profile'))
 
-    # Save profile fields + NTRP rating
+    # Update NTRP rating; only update email/phone if provided (old join form compat)
     email = request.form.get('email', '').strip()
     phone = request.form.get('phone', '').strip()
-    cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
-                (email, phone, ntrp_rating, current_user.id))
+    if phone:
+        phone_digits = ''.join(c for c in phone if c.isdigit())
+        if len(phone_digits) != 10:
+            conn.close()
+            flash('Phone number must be 10 digits.')
+            return redirect(url_for('profile'))
+    if email or phone:
+        cur.execute(f'UPDATE users SET email = {ph}, phone = {ph}, ntrp_rating = {ph} WHERE id = {ph}',
+                    (email, phone, ntrp_rating, current_user.id))
+    else:
+        cur.execute(f'UPDATE users SET ntrp_rating = {ph} WHERE id = {ph}',
+                    (ntrp_rating, current_user.id))
 
     # Insert as pending — will be activated at next monthly reset
     cur.execute(f'''
@@ -2231,11 +2549,13 @@ def ladder_join():
     # Send confirmation email
     cur_user_email = email or current_user.email
     if cur_user_email:
-        send_email(cur_user_email, f"You're signed up for the {ladder_name} ladder!",
+        send_email(cur_user_email, f"Signup confirmed: {ladder_name} Tennis Ladder",
             email_wrap(f'''<p>Hi {current_user.username},</p>
-<p>You've signed up for the <strong>{ladder_name} Singles Tennis Ladder</strong>!</p>
-<p>You'll be added to the ladder at the beginning of <strong>{next_month_name}</strong>. We'll email you when you're placed.</p>''',
-                f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
+<p>Welcome to the <strong>{ladder_name} Tennis Ladder</strong>. You will be added to the ladder on the 1st of {next_month_name}.</p>
+<p>Ladder rules and all relevant information are available on the website at <a href="https://{get_brand()['APP_DOMAIN']}">{get_brand()['APP_DOMAIN']}</a>. You can view your profile and ladder status here: <a href="{url_for('profile', _external=True)}">{url_for('profile', _external=True)}</a>.</p>
+<p>As soon as you are added, you will be able to click on <strong>My Group</strong> where you can see your opponents, available information, scheduling, and scoring.</p>
+<p>We look forward to seeing you on the court.</p>''',
+                f"{ladder_name} Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
 
     # Notify admins
     send_email(ADMIN_EMAILS, f"New player signed up: {current_user.username}",
@@ -2250,7 +2570,7 @@ def ladder_join():
 @app.route('/ladder/leave', methods=['POST'])
 @login_required
 def ladder_leave():
-    ladder_id = get_ladder_id()
+    ladder_id = request.form.get('ladder_id', type=int) or get_ladder_id()
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
@@ -2272,7 +2592,7 @@ def ladder_leave():
 
         # Email the user
         if current_user.email:
-            send_email(current_user.email, f"You've left the {ladder_name} ladder",
+            send_email(current_user.email, f"You have left the {ladder_name} Tennis Ladder",
                 email_wrap(f'''<p>Hi {current_user.username},</p>
 <p>You've been removed from the <strong>{ladder_name} Singles Tennis Ladder</strong>.</p>
 <p>You can rejoin anytime from your <a href="{url_for('profile', _external=True)}">profile page</a>.</p>''',
@@ -2293,7 +2613,7 @@ def ladder_leave():
 @app.route('/ladder/pause', methods=['POST'])
 @login_required
 def ladder_pause():
-    ladder_id = get_ladder_id()
+    ladder_id = request.form.get('ladder_id', type=int) or get_ladder_id()
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
@@ -2319,7 +2639,7 @@ def ladder_pause():
 @app.route('/ladder/unpause', methods=['POST'])
 @login_required
 def ladder_unpause():
-    ladder_id = get_ladder_id()
+    ladder_id = request.form.get('ladder_id', type=int) or get_ladder_id()
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
@@ -2360,6 +2680,12 @@ def edit_profile():
     email = request.form.get('email', '').strip()
     phone = request.form.get('phone', '').strip()
     ntrp = request.form.get('ntrp_rating', '').strip()
+
+    phone_digits = ''.join(c for c in phone if c.isdigit())
+    if phone and len(phone_digits) != 10:
+        flash('Phone number must be 10 digits.')
+        return redirect(url_for('profile'))
+
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
@@ -2382,6 +2708,41 @@ def edit_profile():
     conn.commit()
     conn.close()
     flash('Profile updated.')
+    return redirect(url_for('profile'))
+
+
+@app.route('/profile/set-password', methods=['POST'])
+@login_required
+def set_password():
+    new_password = request.form.get('new_password', '')
+    confirm_password = request.form.get('confirm_password', '')
+
+    if len(new_password) < 6:
+        flash('Password must be at least 6 characters.')
+        return redirect(url_for('profile'))
+    if new_password != confirm_password:
+        flash('Passwords do not match.')
+        return redirect(url_for('profile'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT password_hash FROM users WHERE id = {ph}', (current_user.id,))
+    row = dict(cur.fetchone())
+
+    if row.get('password_hash'):
+        current_password = request.form.get('current_password', '')
+        if not check_password_hash(row['password_hash'], current_password):
+            conn.close()
+            flash('Current password is incorrect.')
+            return redirect(url_for('profile'))
+
+    hashed = generate_password_hash(new_password)
+    cur.execute(f'UPDATE users SET password_hash = {ph} WHERE id = {ph}', (hashed, current_user.id))
+    conn.commit()
+    conn.close()
+    flash('Password saved successfully.')
     return redirect(url_for('profile'))
 
 
@@ -2651,7 +3012,31 @@ def booking_confirm(booking_id):
 
     cur.execute(f"UPDATE match_bookings SET status = 'confirmed' WHERE id = {ph}", (booking_id,))
     conn.commit()
+
+    # Email the requester that their proposed time was confirmed
+    cur.execute(f'SELECT email, username FROM users WHERE id = {ph}', (booking['requester_id'],))
+    requester = dict(cur.fetchone())
     conn.close()
+
+    if requester.get('email'):
+        from datetime import datetime as dt
+        try:
+            date_str = dt.strptime(booking['match_date'], '%Y-%m-%d').strftime('%A, %B %-d')
+        except Exception:
+            date_str = booking['match_date']
+        start_h = booking['start_hour']
+        start_ampm = f"{start_h % 12 or 12}{'am' if start_h < 12 else 'pm'}"
+        send_email(
+            requester['email'],
+            f"{current_user.username} confirmed your match time",
+            email_wrap(f'''
+<p>Hi {requester['username']},</p>
+<p><strong>{current_user.username}</strong> has confirmed your proposed match time:</p>
+<p style="font-size: 1.1em; font-weight: bold;">{date_str} at {start_ampm}</p>
+<p><a href="https://{get_brand()['APP_DOMAIN']}/my-group">View your group</a></p>
+''')
+        )
+
     flash('Match time confirmed!')
     return redirect(url_for('my_group'))
 
@@ -2698,9 +3083,14 @@ def booking_cancel(booking_id):
         return redirect(url_for('my_group'))
 
     booking = dict(booking)
-    if booking['requester_id'] != current_user.id:
+    is_involved = current_user.id in (booking['requester_id'], booking['opponent_id'])
+    if not is_involved:
         conn.close()
-        flash('Only the requester can cancel.')
+        flash('You are not part of this booking.')
+        return redirect(url_for('my_group'))
+    if booking['status'] == 'pending' and booking['requester_id'] != current_user.id:
+        conn.close()
+        flash('Only the requester can cancel a pending booking.')
         return redirect(url_for('my_group'))
 
     cur.execute(f"UPDATE match_bookings SET status = 'cancelled' WHERE id = {ph}", (booking_id,))
@@ -2714,12 +3104,24 @@ def booking_cancel(booking_id):
 
 @app.route('/admin')
 @login_required
-@require_admin
+@require_ladder_admin
 def admin():
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
     ladder_id = get_ladder_id()
+
+    # For ladder-specific admins, enforce they only see ladders they admin
+    if not current_user.is_admin:
+        admin_ladder_ids = get_admin_ladder_ids(current_user.id)
+        if not admin_ladder_ids:
+            flash('You have no ladders to administer.')
+            conn.close()
+            return redirect(url_for('index'))
+        if ladder_id not in admin_ladder_ids:
+            ladder_id = admin_ladder_ids[0]
+            session['ladder_id'] = ladder_id
+
     month, year = get_current_month_year()
 
     # Get all users
@@ -2791,21 +3193,38 @@ def admin():
         else:
             ladder_status[r['user_id']] = 'paused'
 
-    # Mark users/players who have logged in (via Google OR magic link)
+    # Mark users/players who have logged in (via Google, magic link, or password set)
     for u in all_users:
-        u['has_logged_in'] = bool(u.get('google_id')) or (u.get('email') in magic_logged_in_emails)
+        u['has_logged_in'] = bool(u.get('google_id')) or (u.get('email') in magic_logged_in_emails) or bool(u.get('password_hash'))
         u['ladder_status'] = ladder_status.get(u['id'], 'inactive')
     for lp in ladder_players:
-        lp['has_logged_in'] = bool(lp.get('google_id')) or (lp.get('email') in magic_logged_in_emails)
+        lp['has_logged_in'] = bool(lp.get('google_id')) or (lp.get('email') in magic_logged_in_emails) or bool(lp.get('password_hash'))
+
+    # Ladder admins for this ladder (global admin view only)
+    cur.execute(f'''
+        SELECT u.id, u.username, u.email
+        FROM ladder_admins la
+        JOIN users u ON la.user_id = u.id
+        WHERE la.ladder_id = {ph}
+        ORDER BY u.username ASC
+    ''', (ladder_id,))
+    ladder_admin_users = [dict(r) for r in cur.fetchall()]
 
     conn.close()
     all_ladders = get_all_ladders()
+    # Ladder-specific admins only see their own ladders in the switcher
+    if not current_user.is_admin:
+        admin_ladder_ids = get_admin_ladder_ids(current_user.id)
+        all_ladders = [l for l in all_ladders if l['id'] in admin_ladder_ids]
+
     ladder_name = get_ladder_name(ladder_id)
     return render_template('admin.html', all_users=all_users, ladder_players=ladder_players,
                            pending_players=pending_players, paused_players=paused_players,
                            groups=groups, month=month, year=year, disputed_count=disputed_count,
                            all_ladders=all_ladders, ladder_name=ladder_name,
-                           current_ladder_id=ladder_id)
+                           current_ladder_id=ladder_id,
+                           is_global_admin=current_user.is_admin,
+                           ladder_admin_users=ladder_admin_users)
 
 
 @app.route('/admin/generate-login-link', methods=['POST'])
@@ -2848,7 +3267,7 @@ def admin_generate_login_link():
 
 @app.route('/admin/bulk-invite', methods=['POST'])
 @login_required
-@require_admin
+@require_ladder_admin
 def admin_bulk_invite():
     """Send welcome/migration emails with magic login links to all players who haven't logged in yet."""
     ladder_id = get_ladder_id()
@@ -2926,7 +3345,7 @@ def admin_bulk_invite():
 
 @app.route('/admin/add-to-ladder', methods=['POST'])
 @login_required
-@require_admin
+@require_ladder_admin
 def admin_add_to_ladder():
     user_id = int(request.form.get('user_id', 0))
     ranking = int(request.form.get('ranking', 0))
@@ -2996,9 +3415,51 @@ def admin_add_to_ladder():
     return redirect(url_for('admin'))
 
 
+@app.route('/admin/add-to-ladder-pending', methods=['POST'])
+@login_required
+@require_ladder_admin
+def admin_add_to_ladder_pending():
+    """Add an inactive user to the current ladder as pending (placed next monthly reset)."""
+    user_id = int(request.form.get('user_id', 0))
+    ladder_id = get_ladder_id()
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'SELECT id, is_active, pending FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph}',
+                (user_id, ladder_id))
+    existing = cur.fetchone()
+    if existing:
+        existing = dict(existing)
+        is_active = existing['is_active'] if USE_POSTGRES else existing['is_active'] == 1
+        is_pending = existing['pending'] if USE_POSTGRES else existing['pending'] == 1
+        if is_active or is_pending:
+            flash('Player is already active or pending on this ladder.')
+            conn.close()
+            return redirect(url_for('admin'))
+        # Reactivate paused player as pending
+        cur.execute(f'''
+            UPDATE ladder_players SET is_active = {ph}, pending = {ph} WHERE id = {ph}
+        ''', (True if USE_POSTGRES else 1, True if USE_POSTGRES else 1, existing['id']))
+    else:
+        cur.execute(f'SELECT COALESCE(MAX(ranking), 0) as mr FROM ladder_players WHERE ladder_id = {ph}',
+                    (ladder_id,))
+        max_rank = cur.fetchone()['mr']
+        cur.execute(f'''
+            INSERT INTO ladder_players (user_id, ladder_id, ranking, is_active, pending)
+            VALUES ({ph}, {ph}, {ph}, {ph}, {ph})
+        ''', (user_id, ladder_id, max_rank + 1,
+              True if USE_POSTGRES else 1, True if USE_POSTGRES else 1))
+    cur.execute(f'SELECT username FROM users WHERE id = {ph}', (user_id,))
+    urow = cur.fetchone()
+    conn.commit()
+    conn.close()
+    flash(f'{urow["username"] if urow else "Player"} added to ladder as pending.')
+    return redirect(url_for('admin'))
+
+
 @app.route('/admin/remove-from-ladder', methods=['POST'])
 @login_required
-@require_admin
+@require_ladder_admin
 def admin_remove_from_ladder():
     user_id = int(request.form.get('user_id', 0))
     ladder_id = get_ladder_id()
@@ -3030,7 +3491,7 @@ def admin_remove_from_ladder():
 
 @app.route('/admin/pause-player', methods=['POST'])
 @login_required
-@require_admin
+@require_ladder_admin
 def admin_pause_player():
     user_id = int(request.form.get('user_id', 0))
     ladder_id = get_ladder_id()
@@ -3093,6 +3554,181 @@ def admin_toggle_admin():
     return redirect(url_for('admin'))
 
 
+@app.route('/admin/add-ladder-admin', methods=['POST'])
+@login_required
+@require_admin
+def admin_add_ladder_admin():
+    """Make a user a ladder-specific admin for the current ladder (global admin only)."""
+    user_id = int(request.form.get('user_id', 0))
+    ladder_id = int(request.form.get('ladder_id', 0)) or get_ladder_id()
+    if not user_id or not ladder_id:
+        flash('Invalid user or ladder.')
+        return redirect(url_for('admin'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # Verify user exists
+    cur.execute(f'SELECT username FROM users WHERE id = {ph}', (user_id,))
+    user_row = cur.fetchone()
+    if not user_row:
+        flash('User not found.')
+        conn.close()
+        return redirect(url_for('admin'))
+
+    try:
+        if USE_POSTGRES:
+            cur.execute(
+                f'INSERT INTO ladder_admins (user_id, ladder_id) VALUES ({ph}, {ph}) ON CONFLICT DO NOTHING',
+                (user_id, ladder_id))
+        else:
+            cur.execute(
+                f'INSERT OR IGNORE INTO ladder_admins (user_id, ladder_id) VALUES ({ph}, {ph})',
+                (user_id, ladder_id))
+        conn.commit()
+        flash(f'{dict(user_row)["username"]} is now a ladder admin for this ladder.')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error: {e}')
+    conn.close()
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/remove-ladder-admin', methods=['POST'])
+@login_required
+@require_admin
+def admin_remove_ladder_admin():
+    """Remove a user's ladder admin role for the current ladder (global admin only)."""
+    user_id = int(request.form.get('user_id', 0))
+    ladder_id = int(request.form.get('ladder_id', 0)) or get_ladder_id()
+    if not user_id or not ladder_id:
+        flash('Invalid user or ladder.')
+        return redirect(url_for('admin'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'DELETE FROM ladder_admins WHERE user_id = {ph} AND ladder_id = {ph}', (user_id, ladder_id))
+    conn.commit()
+    conn.close()
+    flash('Ladder admin removed.')
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/create-ladder', methods=['POST'])
+@login_required
+@require_admin
+def admin_create_ladder():
+    """Create a new ladder and optionally assign a ladder admin (global admin only)."""
+    name = request.form.get('name', '').strip()
+    city = request.form.get('city', '').strip()
+    ladder_type = request.form.get('ladder_type', 'singles').strip()
+    sport = request.form.get('sport', 'tennis').strip()
+    admin_email = request.form.get('admin_email', '').strip().lower()
+
+    if not name or not city:
+        flash('Ladder name and city are required.')
+        return redirect(url_for('admin'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(
+        f"INSERT INTO ladders (name, sport, city, ladder_type) VALUES ({ph}, {ph}, {ph}, {ph})",
+        (name, sport, city, ladder_type))
+    conn.commit()
+
+    if USE_POSTGRES:
+        cur.execute('SELECT lastval() as id')
+    else:
+        cur.execute('SELECT last_insert_rowid() as id')
+    new_ladder_id = dict(cur.fetchone())['id']
+
+    # Assign ladder admin if email provided
+    if admin_email:
+        cur.execute(f'SELECT id, username FROM users WHERE LOWER(email) = {ph}', (admin_email,))
+        admin_user = cur.fetchone()
+        if admin_user:
+            admin_user = dict(admin_user)
+            if USE_POSTGRES:
+                cur.execute(
+                    f'INSERT INTO ladder_admins (user_id, ladder_id) VALUES ({ph}, {ph}) ON CONFLICT DO NOTHING',
+                    (admin_user['id'], new_ladder_id))
+            else:
+                cur.execute(
+                    f'INSERT OR IGNORE INTO ladder_admins (user_id, ladder_id) VALUES ({ph}, {ph})',
+                    (admin_user['id'], new_ladder_id))
+            conn.commit()
+            flash(f'Ladder "{name}" created and {admin_user["username"]} set as ladder admin.')
+        else:
+            flash(f'Ladder "{name}" created, but no user found with email {admin_email}.')
+    else:
+        flash(f'Ladder "{name}" created.')
+
+    conn.close()
+    session['ladder_id'] = new_ladder_id
+    return redirect(url_for('admin'))
+
+
+@app.route('/admin/disputes')
+@login_required
+@require_ladder_admin
+def admin_disputes():
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'''
+        SELECT m.id, m.set1_p1, m.set1_p2, m.set2_p1, m.set2_p2, m.set3_p1, m.set3_p2,
+               m.dispute_notes, m.created_at, m.submitted_by, m.outcome_type,
+               u1.username as p1_name, u2.username as p2_name,
+               us.username as submitter_name,
+               l.id as ladder_id, l.name as ladder_name, mg.month, mg.year
+        FROM matches m
+        JOIN users u1 ON u1.id = m.player1_id
+        JOIN users u2 ON u2.id = m.player2_id
+        JOIN users us ON us.id = m.submitted_by
+        JOIN monthly_groups mg ON mg.id = m.group_id
+        JOIN ladders l ON l.id = mg.ladder_id
+        WHERE m.status = 'disputed'
+        ORDER BY m.created_at DESC
+    ''')
+    disputes = [dict(r) for r in cur.fetchall()]
+    # Ladder-specific admins only see disputes for their ladders
+    if not current_user.is_admin:
+        admin_ladder_ids = set(get_admin_ladder_ids(current_user.id))
+        disputes = [d for d in disputes if d.get('ladder_id') in admin_ladder_ids]
+    conn.close()
+    return render_template('admin_disputes.html', disputes=disputes)
+
+
+@app.route('/admin/resolve-dispute/<int:match_id>', methods=['POST'])
+@login_required
+@require_ladder_admin
+def admin_resolve_dispute(match_id):
+    action = request.form.get('action')
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    if action == 'confirm':
+        cur.execute(f"UPDATE matches SET status = 'confirmed', confirmed_by = {ph} WHERE id = {ph}",
+                    (current_user.id, match_id))
+        conn.commit()
+        flash('Match confirmed.')
+    elif action == 'delete':
+        cur.execute(f'DELETE FROM matches WHERE id = {ph}', (match_id,))
+        conn.commit()
+        flash('Match deleted.')
+    else:
+        flash('Unknown action.')
+
+    conn.close()
+    return redirect(url_for('admin_disputes'))
+
+
 @app.route('/admin/delete-user', methods=['POST'])
 @login_required
 @require_admin
@@ -3133,7 +3769,7 @@ def admin_delete_user():
 
 @app.route('/admin/generate-groups', methods=['POST'])
 @login_required
-@require_admin
+@require_ladder_admin
 def admin_generate_groups():
     ladder_id = get_ladder_id()
     month, year = get_current_month_year()
@@ -3175,7 +3811,6 @@ def admin_generate_groups():
     while i < len(players):
         remaining = len(players) - i
         if remaining == 4:
-            # Split 4 into two groups of 2
             groups.append(players[i:i+2])
             groups.append(players[i+2:i+4])
             i += 4
@@ -3185,6 +3820,52 @@ def admin_generate_groups():
         else:
             groups.append(players[i:i+3])
             i += 3
+
+    # ── No-repeat fixup: avoid grouping players who shared a group last month ──
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    cur.execute(f'''
+        SELECT player1_id, player2_id, player3_id FROM monthly_groups
+        WHERE ladder_id = {ph} AND month = {ph} AND year = {ph}
+    ''', (ladder_id, prev_month, prev_year))
+    prior_pairs = set()
+    for row in cur.fetchall():
+        row = dict(row)
+        ids = [row['player1_id'], row['player2_id'], row['player3_id']]
+        ids = [x for x in ids if x is not None]
+        for a_idx in range(len(ids)):
+            for b_idx in range(a_idx + 1, len(ids)):
+                prior_pairs.add((min(ids[a_idx], ids[b_idx]),
+                                  max(ids[a_idx], ids[b_idx])))
+
+    def group_conflicts(grp):
+        uids = [p['user_id'] for p in grp]
+        count = 0
+        for a_idx in range(len(uids)):
+            for b_idx in range(a_idx + 1, len(uids)):
+                if (min(uids[a_idx], uids[b_idx]),
+                        max(uids[a_idx], uids[b_idx])) in prior_pairs:
+                    count += 1
+        return count
+
+    # Up to 5 passes: swap the bottom player of a conflicting group with the
+    # top player of the next group if it reduces the total conflict count.
+    if prior_pairs:
+        for _ in range(5):
+            changed = False
+            for gi in range(len(groups) - 1):
+                if len(groups[gi]) < 2 or len(groups[gi + 1]) < 1:
+                    continue
+                if group_conflicts(groups[gi]) > 0:
+                    new_curr = groups[gi][:-1] + [groups[gi + 1][0]]
+                    new_next = [groups[gi][-1]] + groups[gi + 1][1:]
+                    if (group_conflicts(new_curr) + group_conflicts(new_next)
+                            < group_conflicts(groups[gi]) + group_conflicts(groups[gi + 1])):
+                        groups[gi] = new_curr
+                        groups[gi + 1] = new_next
+                        changed = True
+            if not changed:
+                break
 
     # Insert groups
     for idx, group_players in enumerate(groups):
@@ -3204,15 +3885,30 @@ def admin_generate_groups():
 
 @app.route('/admin/monthly-reset', methods=['POST'])
 @login_required
-@require_admin
+@require_ladder_admin
 def admin_monthly_reset():
-    """Process end-of-month: calculate standings, apply movement, archive results."""
+    """Process end-of-month: calculate standings, apply movement, archive results.
+    Uses the most recent month that has groups for this ladder (not today's date),
+    so it works correctly even when run on the 1st of the following month."""
     ladder_id = get_ladder_id()
-    month, year = get_current_month_year()
 
     conn = get_db()
     cur = conn.cursor()
     ph = get_placeholder()
+
+    # Find the most recent month/year that has groups for this ladder
+    cur.execute(f'''
+        SELECT month, year FROM monthly_groups
+        WHERE ladder_id = {ph}
+        ORDER BY year DESC, month DESC
+        LIMIT 1
+    ''', (ladder_id,))
+    recent = cur.fetchone()
+    if not recent:
+        conn.close()
+        flash('No groups found for this ladder.')
+        return redirect(url_for('admin'))
+    month, year = recent['month'], recent['year']
 
     # Get current month groups
     cur.execute(f'''
@@ -3308,57 +4004,43 @@ def admin_monthly_reset():
               s.get('wins', 0), s.get('losses', 0),
               s.get('games_won', 0), s.get('games_lost', 0), move))
 
-    # Apply movements by processing groups from top to bottom
-    # Within each group, handle swaps
+    # Apply within-group rank reassignment based on performance.
+    # Best performer inherits the best (lowest-numbered) rank slot in the group;
+    # worst performer inherits the worst slot. Reseed is applied afterwards.
+    player_standings = {}
+    for group in groups:
+        gs = get_group_standings(group['id'])
+        player_standings.update(gs)
+
+    _temp_rank = [-50000]
+
     for group in groups:
         player_ids = [group['player1_id'], group['player2_id']]
         if group.get('player3_id'):
             player_ids.append(group['player3_id'])
         player_ids = [pid for pid in player_ids if pid]
+        if len(player_ids) < 2:
+            continue
 
-        # Sort by current ranking (ascending = top first)
-        player_ids.sort(key=lambda pid: rankings.get(pid, 999))
+        rank_slots = sorted(rankings.get(pid, 999) for pid in player_ids)
 
-        top_player = player_ids[0]
-        bottom_player = player_ids[-1]
+        def perf_key(pid):
+            s = player_standings.get(pid, {})
+            return (s.get('wins', 0),
+                    s.get('sets_won', 0) - s.get('sets_lost', 0),
+                    s.get('games_won', 0) - s.get('games_lost', 0))
 
-        top_rank = rankings.get(top_player, 1)
-        bottom_rank = rankings.get(bottom_player, 1)
+        players_by_perf = sorted(player_ids, key=perf_key, reverse=True)
 
-        # Player moving up swaps with the person above them (outside the group)
-        if movements.get(top_player) == 'up' and top_rank > 1:
-            # Swap with person at top_rank - 1
-            above_rank = top_rank - 1
-            cur.execute(f'''
-                SELECT user_id FROM ladder_players
-                WHERE ladder_id = {ph} AND ranking = {ph}
-            ''', (ladder_id, above_rank))
-            above_row = cur.fetchone()
-            if above_row:
-                above_uid = dict(above_row)['user_id']
-                cur.execute(f'UPDATE ladder_players SET ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
-                            (above_rank, top_player, ladder_id))
-                cur.execute(f'UPDATE ladder_players SET ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
-                            (top_rank, above_uid, ladder_id))
-                rankings[top_player] = above_rank
-                rankings[above_uid] = top_rank
+        for pid in player_ids:
+            _temp_rank[0] -= 1
+            cur.execute(f'UPDATE ladder_players SET ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
+                        (_temp_rank[0], pid, ladder_id))
 
-        if movements.get(bottom_player) == 'down':
-            cur_bottom_rank = rankings.get(bottom_player, 1)
-            below_rank = cur_bottom_rank + 1
-            cur.execute(f'''
-                SELECT user_id FROM ladder_players
-                WHERE ladder_id = {ph} AND ranking = {ph}
-            ''', (ladder_id, below_rank))
-            below_row = cur.fetchone()
-            if below_row:
-                below_uid = dict(below_row)['user_id']
-                cur.execute(f'UPDATE ladder_players SET ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
-                            (below_rank, bottom_player, ladder_id))
-                cur.execute(f'UPDATE ladder_players SET ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
-                            (cur_bottom_rank, below_uid, ladder_id))
-                rankings[bottom_player] = below_rank
-                rankings[below_uid] = cur_bottom_rank
+        for i, pid in enumerate(players_by_perf):
+            cur.execute(f'UPDATE ladder_players SET ranking = {ph} WHERE user_id = {ph} AND ladder_id = {ph}',
+                        (rank_slots[i], pid, ladder_id))
+            rankings[pid] = rank_slots[i]
 
     # Top 10 / Bottom 10 reseeding
     # Reload current rankings from DB after swaps
@@ -3520,7 +4202,7 @@ def admin_monthly_reset():
             # Email the player
             if pp.get('email'):
                 send_email(pp['email'],
-                    f"You're on the {ladder_name} ladder!",
+                    f"You have been placed on the {ladder_name} Tennis Ladder",
                     email_wrap(f'''<p>Hi {pp['username']},</p>
 <p>You've been placed on the <strong>{ladder_name} Singles Tennis Ladder</strong> at rank <strong>#{new_rank}</strong>.</p>
 <p>Groups will be assigned shortly. Check your group and schedule matches!</p>
@@ -3544,9 +4226,330 @@ def admin_monthly_reset():
     return redirect(url_for('admin'))
 
 
+@app.route('/admin/new-month', methods=['POST'])
+@login_required
+@require_ladder_admin
+def admin_new_month():
+    """One-click: run monthly reset for the last completed month, then generate
+    groups for the current month. This is the normal end-of-month workflow."""
+    ladder_id = get_ladder_id()
+    new_month, new_year = get_current_month_year()
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # ── Find the most recent completed month that has groups ──────────────────
+    cur.execute(f'''
+        SELECT month, year FROM monthly_groups
+        WHERE ladder_id = {ph}
+        ORDER BY year DESC, month DESC
+        LIMIT 1
+    ''', (ladder_id,))
+    recent = cur.fetchone()
+    if not recent:
+        conn.close()
+        flash('No groups found to process.')
+        return redirect(url_for('admin'))
+    old_month, old_year = recent['month'], recent['year']
+
+    # If the most recent groups are already for the new month, skip the reset
+    if old_month == new_month and old_year == new_year:
+        conn.close()
+        flash(f'Groups for {new_month}/{new_year} already exist. Delete them first to re-generate.')
+        return redirect(url_for('admin'))
+
+    # ── STEP 1: Run the monthly reset for old_month/old_year ─────────────────
+    cur.execute(f'''
+        SELECT * FROM monthly_groups
+        WHERE ladder_id = {ph} AND month = {ph} AND year = {ph}
+        ORDER BY group_number ASC
+    ''', (ladder_id, old_month, old_year))
+    groups = [dict(r) for r in cur.fetchall()]
+
+    movements = {}
+    for group in groups:
+        standings = get_group_standings(group['id'])
+        player_ids = [group['player1_id'], group['player2_id']]
+        if group.get('player3_id'):
+            player_ids.append(group['player3_id'])
+        player_ids = [pid for pid in player_ids if pid]
+
+        if len(player_ids) == 3:
+            for pid in player_ids:
+                s = standings.get(pid, {'wins': 0, 'losses': 0})
+                if s['wins'] == 2 and s['losses'] == 0:
+                    movements[pid] = 'up'
+                elif s['wins'] == 0 and s['losses'] == 2:
+                    movements[pid] = 'down'
+                else:
+                    movements[pid] = 'stay'
+            tied = [pid for pid in player_ids if movements.get(pid) == 'stay'
+                    and standings.get(pid, {}).get('wins', 0) == 1]
+            if len(tied) == 3:
+                cur.execute(f'''
+                    SELECT user_id, ranking FROM ladder_players
+                    WHERE ladder_id = {ph} ORDER BY ranking ASC
+                ''', (ladder_id,))
+                rankings_tmp = {dict(r)['user_id']: dict(r)['ranking'] for r in cur.fetchall()}
+                def tiebreak_key(pid):
+                    s = standings[pid]
+                    return (s['sets_won'] - s['sets_lost'],
+                            s['games_won'] - s['games_lost'],
+                            -rankings_tmp.get(pid, 999))
+                tied.sort(key=tiebreak_key, reverse=True)
+                movements[tied[0]] = 'up'
+                movements[tied[2]] = 'down'
+        elif len(player_ids) == 2:
+            for pid in player_ids:
+                s = standings.get(pid, {'wins': 0, 'losses': 0})
+                if s['wins'] > s['losses']:
+                    movements[pid] = 'up'
+                elif s['losses'] > s['wins']:
+                    movements[pid] = 'down'
+                else:
+                    movements[pid] = 'stay'
+
+    cur.execute(f'''
+        SELECT user_id, ranking FROM ladder_players
+        WHERE ladder_id = {ph} ORDER BY ranking ASC
+    ''', (ladder_id,))
+    rankings = {dict(r)['user_id']: dict(r)['ranking'] for r in cur.fetchall()}
+
+    # Archive results
+    for uid, move in movements.items():
+        s = {}
+        for group in groups:
+            gs = get_group_standings(group['id'])
+            if uid in gs:
+                s = gs[uid]; break
+        old_rank = rankings.get(uid, 0)
+        cur.execute(f'''
+            INSERT INTO monthly_results (ladder_id, user_id, month, year, old_ranking, new_ranking,
+                wins, losses, games_won, games_lost, movement)
+            VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})
+        ''', (ladder_id, uid, old_month, old_year, old_rank, old_rank,
+              s.get('wins', 0), s.get('losses', 0),
+              s.get('games_won', 0), s.get('games_lost', 0), move))
+
+    # Apply within-group rank reassignment based on performance.
+    # Best performer inherits the best (lowest-numbered) rank slot in the group;
+    # worst performer inherits the worst slot. Reseed is applied afterwards.
+    player_standings = {}
+    for group in groups:
+        gs = get_group_standings(group['id'])
+        player_standings.update(gs)
+
+    _temp_rank = [-50000]
+
+    for group in groups:
+        player_ids = [group['player1_id'], group['player2_id']]
+        if group.get('player3_id'):
+            player_ids.append(group['player3_id'])
+        player_ids = [pid for pid in player_ids if pid]
+        if len(player_ids) < 2:
+            continue
+
+        rank_slots = sorted(rankings.get(pid, 999) for pid in player_ids)
+
+        def perf_key(pid):
+            s = player_standings.get(pid, {})
+            return (s.get('wins', 0),
+                    s.get('sets_won', 0) - s.get('sets_lost', 0),
+                    s.get('games_won', 0) - s.get('games_lost', 0))
+
+        players_by_perf = sorted(player_ids, key=perf_key, reverse=True)
+
+        for pid in player_ids:
+            _temp_rank[0] -= 1
+            cur.execute(f'UPDATE ladder_players SET ranking={ph} WHERE user_id={ph} AND ladder_id={ph}',
+                        (_temp_rank[0], pid, ladder_id))
+
+        for i, pid in enumerate(players_by_perf):
+            cur.execute(f'UPDATE ladder_players SET ranking={ph} WHERE user_id={ph} AND ladder_id={ph}',
+                        (rank_slots[i], pid, ladder_id))
+            rankings[pid] = rank_slots[i]
+
+    # Reseed top/bottom 10
+    RESEED_MAP = {1:1, 2:4, 3:7, 4:2, 5:5, 6:8, 7:3, 8:6, 9:10, 10:9}
+    cur.execute(f'''
+        SELECT user_id, ranking FROM ladder_players
+        WHERE ladder_id={ph} AND is_active={ph} ORDER BY ranking ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1))
+    active_players = [dict(r) for r in cur.fetchall()]
+    total_active = len(active_players)
+
+    def apply_reseed(player_list, offset):
+        if len(player_list) < 2: return
+        temp_base = -10000 - offset
+        for i, (uid, _) in enumerate(player_list):
+            new_pos = RESEED_MAP.get(i + 1, i + 1)
+            new_rank = offset + new_pos - 1
+            cur.execute(f'UPDATE ladder_players SET ranking={ph} WHERE user_id={ph} AND ladder_id={ph}',
+                        (temp_base - i, uid, ladder_id))
+            rankings[uid] = new_rank
+        for uid, new_rank in [(uid, rankings[uid]) for uid, _ in player_list]:
+            cur.execute(f'UPDATE ladder_players SET ranking={ph} WHERE user_id={ph} AND ladder_id={ph}',
+                        (new_rank, uid, ladder_id))
+
+    if total_active >= 10:
+        apply_reseed([(p['user_id'], p['ranking']) for p in active_players[:10]], 1)
+    if total_active >= 20:
+        bottom_10 = [(p['user_id'], p['ranking']) for p in active_players[-10:]]
+        apply_reseed(bottom_10, active_players[-10]['ranking'])
+
+    # Auto-drop inactive players
+    cur.execute(f'''
+        SELECT lp.user_id, lp.ranking, lp.inactive_months FROM ladder_players lp
+        WHERE lp.ladder_id={ph} AND lp.is_active={ph} ORDER BY lp.ranking ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1))
+    all_active = [dict(r) for r in cur.fetchall()]
+    cur.execute(f'''
+        SELECT DISTINCT m.player1_id as pid FROM matches m
+        JOIN monthly_groups mg ON m.group_id=mg.id
+        WHERE mg.ladder_id={ph} AND mg.month={ph} AND mg.year={ph} AND m.status='confirmed'
+        UNION
+        SELECT DISTINCT m.player2_id FROM matches m
+        JOIN monthly_groups mg ON m.group_id=mg.id
+        WHERE mg.ladder_id={ph} AND mg.month={ph} AND mg.year={ph} AND m.status='confirmed'
+    ''', (ladder_id, old_month, old_year, ladder_id, old_month, old_year))
+    active_this_month = {dict(r)['pid'] for r in cur.fetchall()}
+    cur.execute(f'SELECT name FROM ladders WHERE id={ph}', (ladder_id,))
+    ladder_name = dict(cur.fetchone())['name']
+    dropped_count = 0
+    for player in all_active:
+        uid = player['user_id']
+        if uid in active_this_month:
+            cur.execute(f'UPDATE ladder_players SET inactive_months=0 WHERE user_id={ph} AND ladder_id={ph}',
+                        (uid, ladder_id))
+        else:
+            new_inactive = player['inactive_months'] + 1
+            if new_inactive >= 2:
+                drop_rank = rankings.get(uid, player['ranking'])
+                cur.execute(f'UPDATE ladder_players SET is_active={ph}, inactive_months={ph} WHERE user_id={ph} AND ladder_id={ph}',
+                            (False if USE_POSTGRES else 0, new_inactive, uid, ladder_id))
+                cur.execute(f'UPDATE ladder_players SET ranking=ranking-1 WHERE ladder_id={ph} AND ranking>{ph} AND is_active={ph}',
+                            (ladder_id, drop_rank, True if USE_POSTGRES else 1))
+                for k, v in rankings.items():
+                    if v > drop_rank: rankings[k] = v - 1
+                dropped_count += 1
+            else:
+                cur.execute(f'UPDATE ladder_players SET inactive_months={ph} WHERE user_id={ph} AND ladder_id={ph}',
+                            (new_inactive, uid, ladder_id))
+
+    # Activate pending players at bottom
+    cur.execute(f'''
+        SELECT lp.id, lp.user_id, u.ntrp_rating, u.username, u.email
+        FROM ladder_players lp JOIN users u ON lp.user_id=u.id
+        WHERE lp.ladder_id={ph} AND lp.pending={ph}
+        ORDER BY u.ntrp_rating DESC, lp.joined_at ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1))
+    pending_players = [dict(r) for r in cur.fetchall()]
+    if pending_players:
+        cur.execute(f'''
+            SELECT COALESCE(MAX(ranking),0) as max_rank FROM ladder_players
+            WHERE ladder_id={ph} AND is_active={ph} AND pending={ph}
+        ''', (ladder_id, True if USE_POSTGRES else 1, False if USE_POSTGRES else 0))
+        max_rank = dict(cur.fetchone())['max_rank']
+        for i, pp in enumerate(pending_players):
+            new_rank = max_rank + i + 1
+            cur.execute(f'UPDATE ladder_players SET ranking={ph}, is_active={ph}, pending={ph} WHERE id={ph}',
+                        (new_rank, True if USE_POSTGRES else 1, False if USE_POSTGRES else 0, pp['id']))
+            rankings[pp['user_id']] = new_rank
+            if pp.get('email'):
+                send_email(pp['email'],
+                    f"You have been placed on the {ladder_name} Tennis Ladder",
+                    email_wrap(f'''<p>Hi {pp['username']},</p>
+<p>You've been placed on the <strong>{ladder_name} Singles Tennis Ladder</strong> at rank <strong>#{new_rank}</strong>.</p>
+<p>Groups will be assigned shortly. Check your group and schedule matches!</p>
+<p><a href="https://{get_brand()['APP_DOMAIN']}/my-group" style="display: inline-block; padding: 10px 20px; background: #e74c3c; color: #fff; text-decoration: none; border-radius: 4px;">View Your Group</a></p>''',
+                        f"{ladder_name} Singles Tennis Ladder — {get_brand()['APP_DOMAIN']}"))
+
+    # Update archived new_rankings
+    for uid in movements:
+        cur.execute(f'''
+            UPDATE monthly_results SET new_ranking={ph}
+            WHERE user_id={ph} AND ladder_id={ph} AND month={ph} AND year={ph}
+        ''', (rankings.get(uid, 0), uid, ladder_id, old_month, old_year))
+
+    # ── STEP 2: Generate groups for new_month/new_year ────────────────────────
+    cur.execute(f'''
+        SELECT user_id, ranking FROM ladder_players
+        WHERE ladder_id={ph} AND is_active={ph} AND pending={ph}
+        ORDER BY ranking ASC
+    ''', (ladder_id, True if USE_POSTGRES else 1, False if USE_POSTGRES else 0))
+    players = [dict(r) for r in cur.fetchall()]
+
+    new_groups = []
+    i = 0
+    while i < len(players):
+        remaining = len(players) - i
+        if remaining == 4:
+            new_groups.append(players[i:i+2])
+            new_groups.append(players[i+2:i+4])
+            i += 4
+        elif remaining == 2:
+            new_groups.append(players[i:i+2])
+            i += 2
+        else:
+            new_groups.append(players[i:i+3])
+            i += 3
+
+    # No-repeat fixup
+    prior_pairs_ng = set()
+    for group in groups:
+        ids = [group['player1_id'], group['player2_id'], group['player3_id']]
+        ids = [x for x in ids if x]
+        for ai in range(len(ids)):
+            for bi in range(ai+1, len(ids)):
+                prior_pairs_ng.add((min(ids[ai], ids[bi]), max(ids[ai], ids[bi])))
+
+    def grp_conflicts_ng(grp):
+        uids = [p['user_id'] for p in grp]
+        c = 0
+        for ai in range(len(uids)):
+            for bi in range(ai+1, len(uids)):
+                if (min(uids[ai], uids[bi]), max(uids[ai], uids[bi])) in prior_pairs_ng:
+                    c += 1
+        return c
+
+    if prior_pairs_ng:
+        for _ in range(5):
+            changed = False
+            for gi in range(len(new_groups) - 1):
+                if len(new_groups[gi]) < 2 or not new_groups[gi+1]:
+                    continue
+                if grp_conflicts_ng(new_groups[gi]) > 0:
+                    nc = new_groups[gi][:-1] + [new_groups[gi+1][0]]
+                    nn = [new_groups[gi][-1]] + new_groups[gi+1][1:]
+                    if grp_conflicts_ng(nc) + grp_conflicts_ng(nn) < grp_conflicts_ng(new_groups[gi]) + grp_conflicts_ng(new_groups[gi+1]):
+                        new_groups[gi] = nc
+                        new_groups[gi+1] = nn
+                        changed = True
+            if not changed:
+                break
+
+    for idx, gp in enumerate(new_groups):
+        p1 = gp[0]['user_id']
+        p2 = gp[1]['user_id'] if len(gp) > 1 else None
+        p3 = gp[2]['user_id'] if len(gp) > 2 else None
+        cur.execute(f'''
+            INSERT INTO monthly_groups (ladder_id, month, year, group_number, player1_id, player2_id, player3_id)
+            VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph})
+        ''', (ladder_id, new_month, new_year, idx+1, p1, p2, p3))
+
+    conn.commit()
+    conn.close()
+
+    pending_msg = f' {len(pending_players)} new player(s) placed.' if pending_players else ''
+    drop_msg = f' {dropped_count} player(s) auto-dropped.' if dropped_count else ''
+    flash(f'Reset {old_month}/{old_year} complete. Generated {len(new_groups)} groups for {new_month}/{new_year}.{pending_msg}{drop_msg}')
+    return redirect(url_for('admin'))
+
+
 @app.route('/admin/import-csv', methods=['POST'])
 @login_required
-@require_admin
+@require_ladder_admin
 def admin_import_csv():
     """Import players from CSV: name,email,phone,ntrp,ranking"""
     if 'csv_file' not in request.files:
@@ -3624,7 +4627,7 @@ def admin_import_csv():
 
 @app.route('/admin/update-ranking', methods=['POST'])
 @login_required
-@require_admin
+@require_ladder_admin
 def admin_update_ranking():
     user_id = int(request.form.get('user_id', 0))
     new_ranking = int(request.form.get('new_ranking', 0))

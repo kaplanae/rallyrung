@@ -12,6 +12,27 @@
 <div class="card" style="margin-bottom: 20px; border-color: var(--accent); background: var(--accent-dim);">
     <p style="margin: 0; color: var(--accent);">Not a member yet? Create your free profile by clicking <a href="{{ url_for('login') }}" style="font-weight: 700; text-decoration: underline;">HERE</a>.</p>
 </div>
+{% elif not user_ladder_player %}
+<div class="card" style="margin-bottom: 20px;">
+    <h3 style="margin-bottom: 16px;">Join {{ ladder_name }}</h3>
+    <form method="POST" action="{{ url_for('ladder_join') }}">
+        <input type="hidden" name="ladder_id" value="{{ ladder_id }}">
+        <div class="form-group" style="max-width: 200px; margin-bottom: 16px;">
+            <label>Your NTRP Rating</label>
+            <select name="ntrp_rating" required>
+                <option value="">Select...</option>
+                {% for r in ['2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '6.0', '6.5', '7.0'] %}
+                    <option value="{{ r }}" {{ 'selected' if current_user.ntrp_rating == r }}>{{ r }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Join Ladder</button>
+    </form>
+</div>
+{% elif user_ladder_player.pending %}
+<div class="card" style="margin-bottom: 20px; border-color: var(--accent); background: var(--accent-dim);">
+    <p style="margin: 0; color: var(--accent);">You're signed up — you'll be placed on the ladder next month.</p>
+</div>
 {% endif %}
 
 {% if ladder_groups %}
@@ -38,7 +59,7 @@
                         {% if r.player.profile_picture %}
                             <img src="{{ r.player.profile_picture }}" alt="">
                         {% endif %}
-                        {{ r.player.username }} <span style="font-size: 0.8rem; color: {% if r.winner_id == r.player.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.player.ntrp_rating or '' }}{{ r.player.gender or '' }}</span>
+                        <a href="{{ url_for('player_profile', user_id=r.player.id) }}" style="color: inherit; text-decoration: none;">{{ r.player.username }}</a> <span style="font-size: 0.8rem; color: {% if r.winner_id == r.player.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.player.ntrp_rating or '' }}{{ r.player.gender or '' }}</span>
                     </div>
                 </td>
                 <td>
@@ -47,7 +68,7 @@
                         {% if r.opponent.profile_picture %}
                             <img src="{{ r.opponent.profile_picture }}" alt="">
                         {% endif %}
-                        <span style="font-size: 0.8rem; color: {% if r.winner_id == r.opponent.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.opponent.ranking }}</span> {{ r.opponent.username }} <span style="font-size: 0.8rem; color: {% if r.winner_id == r.opponent.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.opponent.ntrp_rating or '' }}{{ r.opponent.gender or '' }}</span>
+                        <span style="font-size: 0.8rem; color: {% if r.winner_id == r.opponent.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.opponent.ranking }}</span> <a href="{{ url_for('player_profile', user_id=r.opponent.id) }}" style="color: inherit; text-decoration: none;">{{ r.opponent.username }}</a> <span style="font-size: 0.8rem; color: {% if r.winner_id == r.opponent.id %}#2ecc71{% else %}var(--text-muted){% endif %};">{{ r.opponent.ntrp_rating or '' }}{{ r.opponent.gender or '' }}</span>
                     </div>
                     {% else %}
                         <span style="color: var(--text-muted);">—</span>

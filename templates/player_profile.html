@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ player.username }} — {{ brand.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="profile-header">
+    {% if player.profile_picture %}
+        <img src="{{ player.profile_picture }}" alt="">
+    {% else %}
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1.5rem; font-weight: 700;">
+            {{ player.username[0]|upper }}
+        </div>
+    {% endif %}
+    <div class="profile-info">
+        <h2>{{ player.username }}</h2>
+        <div class="meta">
+            {% if player.ntrp_rating %}NTRP {{ player.ntrp_rating }}{% endif %}
+            {% if player.gender %} &middot; {{ 'Male' if player.gender == 'M' else 'Female' }}{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_wins }}</div>
+        <div class="stat-label">Wins</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ total_losses }}</div>
+        <div class="stat-label">Losses</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">
+            {% if total_wins + total_losses > 0 %}
+                {{ "%.0f"|format(total_wins / (total_wins + total_losses) * 100) }}%
+            {% else %}
+                —
+            {% endif %}
+        </div>
+        <div class="stat-label">Win Rate</div>
+    </div>
+</div>
+
+{% if player_ladders %}
+<h2 class="section-title" style="margin-top: 32px;">Ladder Standings</h2>
+{% for pl in player_ladders %}
+<div class="card" style="margin-bottom: 10px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <div>
+            <strong>{{ pl.ladder_name }} {{ pl.ladder_type|default('Singles', true)|title }}</strong>
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">
+                {% if pl.pending %}
+                    <span style="color: var(--accent);">Pending — placed next month</span>
+                {% elif pl.is_active %}
+                    <span style="color: #27ae60;">Active</span>
+                {% else %}
+                    <span style="color: var(--text-muted);">Paused</span>
+                {% endif %}
+            </div>
+        </div>
+        <div style="text-align: right;">
+            {% if not pl.pending %}
+            <div style="font-size: 1.4rem; font-weight: 700; color: var(--accent);">#{{ pl.ranking }}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Current Rank</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if match_history %}
+<h2 class="section-title" style="margin-top: 32px;">Match History</h2>
+{% for m in match_history %}
+<div class="match-card">
+    <div class="match-header">
+        <span class="match-players">
+            {{ m.p1_name }} vs {{ m.p2_name }}
+        </span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            {% if m.winner_id %}
+                {% if m.winner_id == viewed_user_id %}
+                    <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(46,204,113,0.15); color: #2ecc71;">WIN</span>
+                {% else %}
+                    <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(231,76,60,0.12); color: #e74c3c;">LOSS</span>
+                {% endif %}
+            {% endif %}
+            <span style="font-size: 0.8rem; color: var(--text-muted);">
+                {{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m.month] }} {{ m.year }}
+            </span>
+        </div>
+    </div>
+    <div class="match-scores">
+        {% if m.outcome_type == 'forfeit' %}
+            <span style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Forfeit</span>
+        {% else %}
+            {% if m.set1_p1 is not none %}
+                <span class="set-score">{{ m.set1_p1 }}-{{ m.set1_p2 }}</span>
+            {% endif %}
+            {% if m.set2_p1 is not none %}
+                <span class="set-score" style="margin-left: 4px;">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
+            {% endif %}
+            {% if m.set3_p1 is not none %}
+                <span class="set-score" style="margin-left: 4px;">
+                    {{ m.set3_p1 }}-{{ m.set3_p2 }}
+                    {% if m.set3_tb %}<span style="font-size: 0.75rem; color: var(--text-muted);">({{ m.set3_tb }})</span>{% endif %}
+                </span>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state" style="margin-top: 32px;">
+    <p>No confirmed matches yet.</p>
+</div>
+{% endif %}
+
+{% endblock %}

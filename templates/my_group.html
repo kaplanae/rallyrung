@@ -51,6 +51,12 @@
         <div style="display: flex; align-items: center; gap: 8px;">
             {% if b.status == 'confirmed' %}
                 <span class="badge badge-active">confirmed</span>
+                {% if current_user.id in [b.requester_id, b.opponent_id] %}
+                    <form method="POST" action="{{ url_for('booking_cancel', booking_id=b.id) }}" class="inline-form"
+                          onsubmit="return confirm('Cancel this confirmed booking?')">
+                        <button type="submit" class="btn btn-secondary btn-sm">Cancel</button>
+                    </form>
+                {% endif %}
             {% elif b.status == 'pending' %}
                 <span class="badge" style="background: rgba(241, 196, 15, 0.15); color: #f1c40f;">pending</span>
                 {% if b.opponent_id == current_user.id %}
@@ -195,20 +201,28 @@
 
         {% if m.status == 'pending' %}
         <div class="match-actions">
-            {% if m.submitted_by != current_user.id and (m.player1_id == current_user.id or m.player2_id == current_user.id) %}
-                <form action="{{ url_for('confirm_match', match_id=m.id) }}" method="POST" class="inline-form">
-                    <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
+            <div class="match-actions-left">
+                {% if m.submitted_by != current_user.id and (m.player1_id == current_user.id or m.player2_id == current_user.id) %}
+                    <form action="{{ url_for('confirm_match', match_id=m.id) }}" method="POST" class="inline-form">
+                        <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
+                    </form>
+                    <button type="button" class="btn btn-danger btn-sm"
+                            onclick="openDisputeModal({{ m.id }}, '{{ m.p1_name }} vs {{ m.p2_name }}',
+                                '{% if m.set1_p1 is not none %}{{ m.set1_p1 }}-{{ m.set1_p2 }}{% endif %}{% if m.set2_p1 is not none %}, {{ m.set2_p1 }}-{{ m.set2_p2 }}{% endif %}{% if m.set3_p1 is not none %}, {{ m.set3_p1 }}-{{ m.set3_p2 }}{% endif %}')">
+                        Dispute
+                    </button>
+                {% elif m.submitted_by == current_user.id %}
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">Waiting for opponent to confirm</span>
+                {% endif %}
+            </div>
+            {% if m.player1_id == current_user.id or m.player2_id == current_user.id %}
+            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+                <a href="{{ url_for('submit_result') }}?edit={{ m.id }}" class="btn btn-secondary btn-sm">Edit</a>
+                <form action="{{ url_for('delete_match', match_id=m.id) }}" method="POST"
+                      style="margin:0;" onsubmit="return confirm('Delete this match result?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                 </form>
-                <form action="{{ url_for('dispute_match', match_id=m.id) }}" method="POST" class="inline-form">
-                    <button type="submit" class="btn btn-danger btn-sm">Dispute</button>
-                </form>
-            {% endif %}
-            {% if m.submitted_by == current_user.id %}
-                <form action="{{ url_for('delete_match', match_id=m.id) }}" method="POST" class="inline-form"
-                      onsubmit="return confirm('Delete this submission?')">
-                    <button type="submit" class="btn btn-secondary btn-sm">Delete</button>
-                </form>
-                <span style="font-size: 0.8rem; color: var(--text-muted);">Waiting for opponent to confirm</span>
+            </div>
             {% endif %}
         </div>
         {% endif %}
@@ -249,4 +263,47 @@
 {% endif %}
 
 {% endif %}
+
+<!-- Dispute Modal -->
+<div id="dispute-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeDisputeModal()">
+    <div class="modal-box">
+        <button class="modal-close" onclick="closeDisputeModal()" aria-label="Close">&times;</button>
+        <h3 style="margin:0 0 4px;">Dispute Match</h3>
+        <p id="dispute-match-label" style="color:var(--text-muted);font-size:0.85rem;margin:0 0 16px;"></p>
+        <form id="dispute-form" method="POST">
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:4px;">Submitted score (read-only)</label>
+                <input id="dispute-orig-score" type="text" readonly
+                       style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text-muted);font-size:0.9rem;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:12px;">
+                <label for="dispute-score" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:4px;">What was the actual score? <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+                <input id="dispute-score" name="dispute_score" type="text" placeholder="e.g. 6-3, 7-5"
+                       style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:0.9rem;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label for="dispute-notes" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:4px;">Notes for admin <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+                <textarea id="dispute-notes" name="dispute_notes" rows="3" placeholder="Describe what happened…"
+                          style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:0.9rem;resize:vertical;box-sizing:border-box;"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="closeDisputeModal()">Cancel</button>
+                <button type="submit" class="btn btn-danger btn-sm">Submit Dispute</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+function openDisputeModal(matchId, label, score) {
+    document.getElementById('dispute-match-label').textContent = label;
+    document.getElementById('dispute-orig-score').value = score || '(no score)';
+    document.getElementById('dispute-score').value = '';
+    document.getElementById('dispute-notes').value = '';
+    document.getElementById('dispute-form').action = '/dispute-match/' + matchId;
+    document.getElementById('dispute-modal').style.display = 'flex';
+}
+function closeDisputeModal() {
+    document.getElementById('dispute-modal').style.display = 'none';
+}
+</script>
 {% endblock %}

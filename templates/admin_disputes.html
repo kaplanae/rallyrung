@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Disputed Matches — {{ brand.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+    <h1 class="page-title" style="margin:0;">Disputed Matches</h1>
+    <a href="{{ url_for('admin') }}" class="btn btn-secondary btn-sm">← Back to Admin</a>
+</div>
+
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+{% for msg in messages %}
+<div class="flash">{{ msg }}</div>
+{% endfor %}
+{% endif %}
+{% endwith %}
+
+{% if disputes %}
+<div class="card" style="padding:0;overflow:hidden;">
+    <table class="ladder-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>Ladder</th>
+                <th>Players</th>
+                <th>Submitted Score</th>
+                <th>Submitter</th>
+                <th>Disputer's Score</th>
+                <th>Notes</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for d in disputes %}
+        {% set score_parts = [] %}
+        {% if d.set1_p1 is not none %}{% set _ = score_parts.append(d.set1_p1|string + '-' + d.set1_p2|string) %}{% endif %}
+        {% if d.set2_p1 is not none %}{% set _ = score_parts.append(d.set2_p1|string + '-' + d.set2_p2|string) %}{% endif %}
+        {% if d.set3_p1 is not none %}{% set _ = score_parts.append(d.set3_p1|string + '-' + d.set3_p2|string) %}{% endif %}
+        {% set submitted_score = score_parts | join(', ') if score_parts else '—' %}
+
+        {% set disputer_score = '' %}
+        {% set disputer_notes = '' %}
+        {% if d.dispute_notes %}
+            {% for line in d.dispute_notes.split('\n') %}
+                {% if line.startswith('Their score: ') %}{% set disputer_score = line[13:] %}
+                {% elif line.startswith('Notes: ') %}{% set disputer_notes = line[7:] %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+
+        <tr>
+            <td style="font-family:monospace;color:var(--text-muted);">#{{ d.id }}</td>
+            <td style="font-size:0.8rem;white-space:nowrap;">
+                {{ (d.created_at|to_central).strftime('%b %d') if d.created_at else '—' }}
+            </td>
+            <td style="font-size:0.85rem;">{{ d.ladder_name }}</td>
+            <td style="white-space:nowrap;">{{ d.p1_name }} vs {{ d.p2_name }}</td>
+            <td style="font-family:monospace;">{{ submitted_score }}</td>
+            <td>{{ d.submitter_name }}</td>
+            <td style="font-family:monospace;">{{ disputer_score or '—' }}</td>
+            <td style="font-size:0.82rem;max-width:200px;">{{ disputer_notes or '—' }}</td>
+            <td style="white-space:nowrap;">
+                <form method="POST" action="{{ url_for('admin_resolve_dispute', match_id=d.id) }}" style="display:inline;">
+                    <input type="hidden" name="action" value="confirm">
+                    <button type="submit" class="btn btn-primary btn-sm"
+                            onclick="return confirm('Confirm original score?')">Confirm original</button>
+                </form>
+                <form method="POST" action="{{ url_for('admin_resolve_dispute', match_id=d.id) }}" style="display:inline;margin-left:4px;">
+                    <input type="hidden" name="action" value="delete">
+                    <button type="submit" class="btn btn-danger btn-sm"
+                            onclick="return confirm('Delete this match permanently?')">Delete match</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No disputed matches. All clear!</p>
+</div>
+{% endif %}
+{% endblock %}

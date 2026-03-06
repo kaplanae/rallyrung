@@ -10,6 +10,10 @@
     {% else %}
     <a href="{{ url_for('ladder') }}" class="btn btn-primary" style="margin-top: 16px;">View Ladder</a>
     {% endif %}
+    <p style="margin-top: 12px; font-size: 0.9rem; color: var(--text-muted);">
+        Want to start a ladder in your city?
+        <a href="{{ url_for('request_ladder') }}" style="color: var(--accent);">Request one here →</a>
+    </p>
 </div>
 
 <div class="hub-steps">

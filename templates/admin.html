@@ -5,22 +5,34 @@
 <h1 class="page-title">Admin Panel — {{ ladder_name }}</h1>
 
 {% if disputed_count > 0 %}
-<div class="flash error">{{ disputed_count }} disputed match{{ 'es' if disputed_count > 1 }} need review.</div>
+<div class="flash error" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+    <span>{{ disputed_count }} disputed match{{ 'es' if disputed_count > 1 }} need review.</span>
+    <a href="{{ url_for('admin_disputes') }}" style="color:inherit;font-weight:600;white-space:nowrap;">Review them →</a>
+</div>
 {% endif %}
 
 <!-- Monthly Actions -->
 <div class="admin-section">
     <h2>Monthly Actions</h2>
-    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <form method="POST" action="{{ url_for('admin_generate_groups') }}"
-              onsubmit="return confirm('This will regenerate groups for the current month and delete any existing matches. Continue?')">
-            <button type="submit" class="btn btn-primary">Generate Groups ({{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month] }} {{ year }})</button>
-        </form>
-        <form method="POST" action="{{ url_for('admin_monthly_reset') }}"
-              onsubmit="return confirm('This will finalize this month, apply ranking changes, and archive results. Continue?')">
-            <button type="submit" class="btn btn-secondary">Run Monthly Reset</button>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start;">
+        <form method="POST" action="{{ url_for('admin_new_month') }}"
+              onsubmit="return confirm('This will finalize last month results, update rankings, then generate groups for this month. Continue?')">
+            <button type="submit" class="btn btn-primary">&#8594; New Month ({{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month] }} {{ year }})</button>
         </form>
     </div>
+    <details style="margin-top: 12px;">
+        <summary style="cursor: pointer; color: var(--text-muted); font-size: 0.85rem;">Advanced: run steps individually</summary>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px;">
+            <form method="POST" action="{{ url_for('admin_generate_groups') }}"
+                  onsubmit="return confirm('This will regenerate groups for the current month and delete any existing matches. Continue?')">
+                <button type="submit" class="btn btn-secondary btn-sm">Generate Groups Only</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin_monthly_reset') }}"
+                  onsubmit="return confirm('This will finalize last month, apply ranking changes, and archive results. Continue?')">
+                <button type="submit" class="btn btn-secondary btn-sm">Monthly Reset Only</button>
+            </form>
+        </div>
+    </details>
 </div>
 
 <!-- Bulk Invite -->
@@ -35,7 +47,8 @@
     </form>
 </div>
 
-<!-- CSV Import -->
+<!-- CSV Import (global admin only) -->
+{% if is_global_admin %}
 <div class="admin-section">
     <h2>Import Players from CSV</h2>
     <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">
@@ -47,6 +60,7 @@
         <button type="submit" class="btn btn-primary btn-sm">Import</button>
     </form>
 </div>
+{% endif %}
 
 <!-- Ladder Players -->
 <div class="admin-section">
@@ -185,7 +199,84 @@
 </div>
 {% endif %}
 
-<!-- All Users -->
+<!-- Ladder Admins (global admin only) -->
+{% if is_global_admin %}
+<div class="admin-section">
+    <h2>Ladder Admins — {{ ladder_name }}</h2>
+    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">
+        Ladder admins can manage this ladder's players, groups, and results but cannot see other ladders.
+    </p>
+    {% if ladder_admin_users %}
+    <table class="admin-table" style="margin-bottom: 16px;">
+        <thead>
+            <tr><th>Name</th><th>Email</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+            {% for la in ladder_admin_users %}
+            <tr>
+                <td>{{ la.username }}</td>
+                <td style="font-size: 0.8rem; color: var(--text-muted);">{{ la.email or "—" }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin_remove_ladder_admin') }}" class="inline-form"
+                          onsubmit="return confirm('Remove {{ la.username }} as ladder admin?')">
+                        <input type="hidden" name="user_id" value="{{ la.id }}">
+                        <input type="hidden" name="ladder_id" value="{{ current_ladder_id }}">
+                        <button type="submit" class="btn btn-sm" style="background: #e74c3c; color: #fff;">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">No ladder admins assigned.</p>
+    {% endif %}
+    <form method="POST" action="{{ url_for('admin_add_ladder_admin') }}" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <input type="hidden" name="ladder_id" value="{{ current_ladder_id }}">
+        <select name="user_id" required style="padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 0.85rem;">
+            <option value="">— Select user —</option>
+            {% for u in all_users %}
+            <option value="{{ u.id }}">{{ u.username }}{% if u.email %} ({{ u.email }}){% endif %}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Add Ladder Admin</button>
+    </form>
+</div>
+
+<!-- Create New Ladder (global admin only) -->
+<div class="admin-section">
+    <h2>Create New Ladder</h2>
+    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">
+        Create a ladder and optionally assign its admin. The admin email must match an existing user account.
+    </p>
+    <form method="POST" action="{{ url_for('admin_create_ladder') }}" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 0.75rem; color: var(--text-muted);">Name</label>
+            <input type="text" name="name" placeholder="e.g. Steiner Ranch" required
+                   style="padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 0.85rem; width: 160px;">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 0.75rem; color: var(--text-muted);">City</label>
+            <input type="text" name="city" placeholder="e.g. Austin" required
+                   style="padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 0.85rem; width: 130px;">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 0.75rem; color: var(--text-muted);">Type</label>
+            <select name="ladder_type" style="padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 0.85rem;">
+                <option value="singles">Singles</option>
+                <option value="doubles">Doubles</option>
+            </select>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 0.75rem; color: var(--text-muted);">Admin Email (optional)</label>
+            <input type="email" name="admin_email" placeholder="admin@example.com"
+                   style="padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 0.85rem; width: 200px;">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Create Ladder</button>
+    </form>
+</div>
+
+<!-- All Users (global admin only) -->
 <div class="admin-section">
     <h2>All Users</h2>
     <table class="admin-table">
@@ -204,7 +295,7 @@
                 <td>{{ u.id }}</td>
                 <td>
                     {{ u.username }}
-                    {% if u.is_admin %}<span class="badge badge-admin">admin</span>{% endif %}
+                    {% if u.is_admin %}<span class="badge badge-admin">global admin</span>{% endif %}
                     {% if u.has_logged_in %}<span class="badge badge-active" style="font-size: 0.65rem;">logged in</span>{% endif %}
                 </td>
                 <td style="font-size: 0.8rem; color: var(--text-muted);">{{ u.email or "—" }}</td>
@@ -223,7 +314,7 @@
                     <form method="POST" action="{{ url_for('admin_toggle_admin') }}" class="inline-form">
                         <input type="hidden" name="user_id" value="{{ u.id }}">
                         <button type="submit" class="btn btn-secondary btn-sm">
-                            {{ "Remove Admin" if u.is_admin else "Make Admin" }}
+                            {{ "Remove Global Admin" if u.is_admin else "Make Global Admin" }}
                         </button>
                     </form>
                     {% if u.email %}
@@ -244,4 +335,5 @@
         </tbody>
     </table>
 </div>
+{% endif %}
 {% endblock %}

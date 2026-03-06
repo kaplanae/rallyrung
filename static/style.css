@@ -509,8 +509,15 @@ nav {
 
 .match-actions {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
     margin-top: 10px;
+}
+.match-actions-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 /* ============ PROFILE ============ */
@@ -937,3 +944,38 @@ footer {
     .hub-ladder-grid { grid-template-columns: 1fr; }
     .hub-steps { gap: 12px; }
 }
+
+/* ============ DISPUTE MODAL ============ */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+}
+.modal-box {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 440px;
+    position: relative;
+}
+.modal-close {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.4rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+.modal-close:hover { color: var(--text); }
+

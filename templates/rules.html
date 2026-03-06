@@ -2,47 +2,32 @@
 {% block title %}Rules — {{ brand.APP_NAME }}{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Cedar Park Singles Tennis Ladder</h1>
+
+{% if is_hub and not current_ladder_name %}
+{# ===== GENERIC TTL RULES (hub home, no ladder selected) ===== #}
+<h1 class="page-title">Texas Tennis Ladders</h1>
 
 <div class="card" style="padding: 24px; line-height: 1.7;">
 
-<p>The Cedar Park Singles Tennis Ladder is <strong>FREE</strong> for men and women 18 and over and is a way for local tennis players to meet and play matches on their own schedules without having to make any commitments to play regularly scheduled matches. Make sure that you read and fully understand the rules below before signing up.</p>
+<p>Texas Tennis Ladders are <strong>FREE</strong> for men and women 18 and over and are a way for local tennis players to meet and play matches on their own schedules without having to make any commitments to play regularly scheduled matches. Make sure that you read and fully understand the rules below before signing up.</p>
 
 <h2 style="margin-top: 32px; margin-bottom: 16px;">How It Works</h2>
 
 <ul style="padding-left: 20px;">
 <li>All players are ranked and listed on the ladder.</li>
 <li>When you join you are added near others with similar tennis ratings and must work your way up.</li>
-<li>You can leave the ladder at any time, and rejoin at any time. To leave the ladder, please go to the ladder on the website and click on the red LEAVE button and fill in the information. When you rejoin the ladder (by signing up on the website again) you will be added either at a similar location from when you left the ladder or somewhere below that.</li>
+<li>You can leave the ladder at any time, and rejoin at any time. To leave the ladder, go to your <strong>Profile</strong> page on the website and click <strong>Leave Ladder</strong>. When you rejoin the ladder you will be added at a similar ranking to where you left, or below.</li>
 <li><strong>Each month players are grouped in 3's</strong> according to rank and some time during that month you schedule and play your two matches with the other two players in your group. This doesn't mean that all three have to meet at the same time and play two back to back matches. It means that if I am player 2, I get in touch with player 1 to schedule our match some time during the month and I also get in touch with player 3 to schedule a match during the month.</li>
 <li>You have the entire month to play your 2 matches, but <strong>try not to wait until the last day</strong>. You should <strong>contact your opponents within the first week of the month</strong>. Text is best, but if you get no response don't forget about email or an actual phone call with voices.</li>
 <li>Depending on the number of players each month, there may be groups in a month that only have one match and a bye for the second match.</li>
-<li>If you <strong>fail to play any matches for 2 straight months</strong> (nothing reported or forfeit) you will be <strong>automatically dropped from the ladder</strong> for the next month and the following months until you sign up again on the website. You can always rejoin at any time but you will be off the ladder for at least the next month.</li>
+<li>If you <strong>fail to play any matches for 2 straight months</strong> (nothing reported or forfeit) you will be <strong>automatically dropped from the ladder</strong>. You will be off the ladder for the remainder of that month but can sign up again starting the following month from your <strong>Profile</strong> page.</li>
 </ul>
 
 <h2 style="margin-top: 32px; margin-bottom: 16px;">Match Locations</h2>
 
 <p>Players arrange the dates, times and locations of their matches. <strong>Please be respectful of other people's time. On-time for your match should be 5 minutes early.</strong></p>
 
-<p>This is a local ladder, so all matches are to be played in the Cedar Park area on one of the following approved courts:</p>
-
-<ul style="padding-left: 20px;">
-<li>Buttercup Creek Park</li>
-<li>Janet Bartles Park</li>
-<li>Nelson Ranch Park</li>
-<li>Milburn Park</li>
-<li>Cedar Park High School</li>
-<li>Vista Ridge High School</li>
-<li>Leander High School</li>
-<li>Anderson Mill West Park (M.U.D.)</li>
-<li>Lakeline Oaks Park (M.U.D.)</li>
-<li>Twin Creeks Country Club (private)</li>
-<li>Rouse High School</li>
-<li>Southwest Williamson County Regional Park</li>
-<li>Glenn High School</li>
-</ul>
-
-<p><strong>Do not suggest playing on courts other than the courts listed above.</strong></p>
+<p>Approved court locations are specific to each ladder. Please select a specific ladder location to see the list of approved courts.</p>
 
 <h2 style="margin-top: 32px; margin-bottom: 16px;">Match Format</h2>
 
@@ -125,11 +110,65 @@
 
 <h2 style="margin-top: 32px; margin-bottom: 16px;">Waiver of Liability</h2>
 
-<p style="font-size: 0.85rem; color: var(--text-muted);">By signing up for Cedar Park Singles Tennis Ladder, you accept and agree to the following: I hereby agree to assume full and complete responsibility, risks, liabilities and hazards incidental to participation in the Cedar Park Singles Tennis Ladder. I agree to indemnify, release and hold harmless the Cedar Park Singles Tennis Ladder, its office holders, agents, employees, and all other persons and entities associated with the ladder from any and all claims, costs, causes of action and liabilities including but not limited to illness, personal injury, death and/or damage to or destruction of property arising from participation in the ladder. I agree to follow all policies and rules, its office holders, agents and employees. I understand failure to comply with Cedar Park Singles Tennis Ladder's policies may result in my removal from said ladder.</p>
+<p style="font-size: 0.85rem; color: var(--text-muted);">By signing up for a Texas Tennis Ladder, you accept and agree to the following: I hereby agree to assume full and complete responsibility, risks, liabilities and hazards incidental to participation in the Texas Tennis Ladder. I agree to indemnify, release and hold harmless the Texas Tennis Ladder, its office holders, agents, employees, and all other persons and entities associated with the ladder from any and all claims, costs, causes of action and liabilities including but not limited to illness, personal injury, death and/or damage to or destruction of property arising from participation in the ladder. I agree to follow all policies and rules, its office holders, agents and employees. I understand failure to comply with Texas Tennis Ladder's policies may result in my removal from said ladder.</p>
 
 <h2 style="margin-top: 32px; margin-bottom: 16px;">Safety</h2>
 
 <p>Remember to be safe. If you are playing someone you don't know, it's always a good idea to play on courts where there are other people around or else bring someone along with you to your match.</p>
 
 </div>
+
+{% else %}
+{# ===== GENERIC SINGLE-LADDER RULES ===== #}
+<h1 class="page-title">{{ brand.APP_NAME }} — How It Works</h1>
+
+<div class="card" style="padding: 24px; line-height: 1.7;">
+
+<p>{{ brand.APP_NAME }} is <strong>free</strong> for men and women 18 and over. Play matches on your own schedule — no required match days or weekly commitments. Read the rules below before signing up.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Monthly Groups</h2>
+
+<ul style="padding-left: 20px;">
+<li>Each month you're placed in a group of 3 players based on your current rank. You play one match against each of the other two players sometime during that month.</li>
+<li><strong>Contact your opponents within the first week of the month.</strong> Text is best, but email or a phone call works too.</li>
+<li>You have the full month to play, but don't wait until the last day.</li>
+<li>Some months a group may only have 2 players, giving one player a bye.</li>
+<li>If you <strong>fail to play any matches for 2 straight months</strong> you'll be <strong>automatically dropped from the ladder.</strong> You can rejoin the following month from your Profile page.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Match Format</h2>
+
+<p><strong>Best of 3 sets</strong>, with a <strong>10-point tiebreaker</strong> in place of a third set if needed. Players can agree to a different format, but this is the default if there's no agreement.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Scheduling & Locations</h2>
+
+<p>Players arrange the date, time, and location of their matches. Any mutually convenient local court works. <strong>Be on time — arriving 5 minutes early is the standard.</strong> If you're running late, notify your opponent as early as possible.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Score Reporting</h2>
+
+<p>After the match, <strong>both players report the result</strong> under <strong>My Group</strong>. Possible outcomes:</p>
+
+<ul style="padding-left: 20px;">
+<li><strong>Completed</strong> — Match was played with a winner and final score.</li>
+<li><strong>Schedule Problem</strong> — Both players tried to find a time but couldn't.</li>
+<li><strong>Weather Problem</strong> — Weather prevented the match.</li>
+<li><strong>Injury</strong> — One player had to retire or couldn't start due to injury or illness.</li>
+<li><strong>Forfeit</strong> — One player made no effort to schedule or refused to play.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Rankings</h2>
+
+<p>At the end of each month, the player with the best record in the group moves up a rung, the worst record moves down, and the middle player stays. Ties are broken by head-to-head record, then sets won/lost.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Sportsmanship</h2>
+
+<p>This ladder is competitive but friendly. Give your opponent the benefit of the doubt on close calls, be on time, and report scores promptly.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Waiver of Liability</h2>
+
+<p style="font-size: 0.85rem; color: var(--text-muted);">By signing up for {{ brand.APP_NAME }}, you agree to assume full responsibility for risks incidental to participation, and to release and hold harmless {{ brand.APP_NAME }}, its organizers, and associated parties from any claims arising from participation in the ladder. Failure to comply with the rules may result in removal from the ladder.</p>
+
+</div>
+{% endif %}
+
 {% endblock %}

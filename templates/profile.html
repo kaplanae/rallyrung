@@ -66,6 +66,7 @@
             <div class="form-group" style="flex: 1;">
                 <label>Phone</label>
                 <input type="tel" name="phone" id="phone-input" value="{{ current_user.phone or '' }}" placeholder="(555) 123-4567" required>
+                <span id="phone-error" style="display: none; color: #e74c3c; font-size: 0.8rem; margin-top: 4px;">Must be 10 digits</span>
             </div>
         </div>
         <div class="form-row">
@@ -98,59 +99,116 @@
             <a href="#" onclick="document.getElementById('rating-help-box').style.display='none'; return false;" style="font-size: 0.8rem;">Close</a>
         </div>
 
-        {% if not ladder_player %}
-            <div class="form-group" style="margin-bottom: 16px;">
-                <label>Select a Ladder</label>
-                <select name="ladder_id" id="ladder-select" required>
-                    <option value="">Choose a ladder...</option>
-                    {% for l in all_ladders %}
-                        <option value="{{ l.id }}">{{ l.name }} {{ l.ladder_type|default('Singles', true)|title }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9rem;">You are not yet on a ladder. Fill in your details and click "Save & Join Ladder" to select a ladder to join.</p>
-            <div style="display: flex; gap: 10px;">
-                <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);" onclick="
-                    document.getElementById('ladder-select').removeAttribute('required');
-                ">Save Profile Only</button>
-                <button type="button" class="btn btn-primary btn-sm" id="join-btn" onclick="
-                    document.getElementById('ladder-select').setAttribute('required', 'required');
-                    var form = document.getElementById('profile-form');
-                    if (!form.checkValidity()) { form.reportValidity(); return; }
-                    form.action = '{{ url_for('ladder_join') }}';
-                    form.submit();
-                ">Save &amp; Join Ladder</button>
-            </div>
-        {% elif ladder_player.pending %}
-            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
-                <span style="color: var(--accent); font-size: 0.9rem;">Signed up — you'll be placed on the {{ ladder_name }} ladder next month</span>
-            </div>
+        {% if not user_ladders and not is_hub %}
+        {# New user on a brand site — primary action is Save & Join, ladder pre-selected #}
+        <input type="hidden" name="ladder_id" value="{{ current_ladder_id }}">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 4px;">
+            <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text);">
+                Save Profile
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="
+                this.closest('form').action = '{{ url_for('ladder_join') }}';
+                this.closest('form').submit();">
+                Save Profile &amp; Join {{ ladder_name }} Ladder
+            </button>
+        </div>
         {% else %}
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
-                {% if ladder_player.is_active %}
-                    <span style="color: var(--text-muted); font-size: 0.9rem;">Active on {{ ladder_name }} — Rank #{{ ladder_player.ranking }}</span>
-                {% endif %}
-            </div>
+        <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
         {% endif %}
     </form>
-    {% if ladder_player and ladder_player.pending %}
-        <form method="POST" action="{{ url_for('ladder_leave') }}" style="margin-top: 12px;"
-              onsubmit="return confirm('Cancel your ladder signup?');">
-            <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Cancel Signup</button>
-        </form>
-    {% elif ladder_player and ladder_player.is_active and not ladder_player.pending %}
-        <form method="POST" action="{{ url_for('ladder_pause') }}" style="margin-top: 12px;">
-            <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Temporarily Leave Ladder</button>
-        </form>
-    {% elif ladder_player and not ladder_player.is_active and not ladder_player.pending %}
-        <p style="margin-top: 12px; margin-bottom: 12px; color: var(--text-muted); font-size: 0.9rem;">You have temporarily left the {{ ladder_name }} ladder. Your rank was #{{ ladder_player.ranking }}.</p>
-        <form method="POST" action="{{ url_for('ladder_unpause') }}">
-            <button type="submit" class="btn btn-primary btn-sm">Rejoin Ladder</button>
-        </form>
-    {% endif %}
 </div>
+
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">
+        <h3>{{ 'Change Password' if has_password else 'Set a Password' }}</h3>
+    </div>
+    <form method="POST" action="{{ url_for('set_password') }}">
+        {% if has_password %}
+        <div class="form-group">
+            <label>Current Password</label>
+            <input type="password" name="current_password" required autocomplete="current-password">
+        </div>
+        {% endif %}
+        <div class="form-row">
+            <div class="form-group" style="flex: 1;">
+                <label>New Password</label>
+                <input type="password" name="new_password" required minlength="6" autocomplete="new-password">
+            </div>
+            <div class="form-group" style="flex: 1;">
+                <label>Confirm Password</label>
+                <input type="password" name="confirm_password" required minlength="6" autocomplete="new-password">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">{{ 'Change Password' if has_password else 'Set Password' }}</button>
+    </form>
+</div>
+
+{% if user_ladders %}
+<h2 class="section-title" style="margin-top: 32px;">My Ladders</h2>
+{% for ul in user_ladders %}
+<div class="card" style="margin-bottom: 12px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <strong style="font-size: 1rem;">{{ ul.ladder_name }} {{ ul.ladder_type|default('Singles', true)|title }}</strong>
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+                {% if ul.pending %}
+                    <span style="color: var(--accent);">Pending — placed next month</span>
+                {% elif ul.is_active %}
+                    <span style="color: #27ae60;">Active</span> &middot; Rank #{{ ul.ranking }}
+                {% else %}
+                    <span style="color: var(--text-muted);">Paused</span> &middot; Rank #{{ ul.ranking }}
+                {% endif %}
+            </div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <a href="{{ url_for('switch_ladder', ladder_id=ul.ladder_id) }}" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">View</a>
+            {% if ul.pending %}
+                <form method="POST" action="{{ url_for('ladder_leave') }}" onsubmit="return confirm('Cancel your signup for {{ ul.ladder_name }}?');" style="display:inline;">
+                    <input type="hidden" name="ladder_id" value="{{ ul.ladder_id }}">
+                    <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Cancel Signup</button>
+                </form>
+            {% elif ul.is_active %}
+                <form method="POST" action="{{ url_for('ladder_pause') }}" style="display:inline;">
+                    <input type="hidden" name="ladder_id" value="{{ ul.ladder_id }}">
+                    <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Pause</button>
+                </form>
+                <form method="POST" action="{{ url_for('ladder_leave') }}" onsubmit="return confirm('Leave the {{ ul.ladder_name }} ladder?');" style="display:inline;">
+                    <input type="hidden" name="ladder_id" value="{{ ul.ladder_id }}">
+                    <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Leave</button>
+                </form>
+            {% else %}
+                <form method="POST" action="{{ url_for('ladder_unpause') }}" style="display:inline;">
+                    <input type="hidden" name="ladder_id" value="{{ ul.ladder_id }}">
+                    <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.8rem;">Rejoin</button>
+                </form>
+                <form method="POST" action="{{ url_for('ladder_leave') }}" onsubmit="return confirm('Leave the {{ ul.ladder_name }} ladder?');" style="display:inline;">
+                    <input type="hidden" name="ladder_id" value="{{ ul.ladder_id }}">
+                    <button type="submit" class="btn btn-sm" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text); font-size: 0.8rem;">Leave</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if available_to_join %}
+<h2 class="section-title" style="margin-top: 32px;">Join a Ladder</h2>
+<div class="card">
+    <form method="POST" action="{{ url_for('ladder_join') }}">
+        <div class="form-group" style="max-width: 300px; margin-bottom: 16px;">
+            <label>Ladder</label>
+            <select name="ladder_id" required>
+                <option value="">Choose a ladder...</option>
+                {% for l in available_to_join %}
+                    <option value="{{ l.id }}">{{ l.name }} {{ l.ladder_type|default('Singles', true)|title }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Join Ladder</button>
+    </form>
+</div>
+{% endif %}
 
 {% if ranking_history %}
 <h2 class="section-title" style="margin-top: 32px;">Ranking History</h2>
@@ -196,24 +254,35 @@
         <span class="match-players">
             {{ m.p1_name }} vs {{ m.p2_name }}
         </span>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">
-            {{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m.month] }} {{ m.year }}
-        </span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            {% if m.winner_name %}
+                {% if m.winner_id == current_user.id %}
+                    <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(46,204,113,0.15); color: #2ecc71;">WIN</span>
+                {% else %}
+                    <span style="font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(231,76,60,0.12); color: #e74c3c;">LOSS</span>
+                {% endif %}
+            {% endif %}
+            <span style="font-size: 0.8rem; color: var(--text-muted);">
+                {{ ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m.month] }} {{ m.year }}
+            </span>
+        </div>
     </div>
     <div class="match-scores">
-        {% if m.set1_p1 is not none %}
-            <span class="set-score">{{ m.set1_p1 }}-{{ m.set1_p2 }}</span>
-        {% endif %}
-        {% if m.set2_p1 is not none %}
-            ,<span class="set-score">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
-        {% endif %}
-        {% if m.set3_p1 is not none %}
-            ,<span class="set-score">{{ m.set3_p1 }}-{{ m.set3_p2 }}</span>
-        {% endif %}
-        {% if m.winner_name %}
-            <span style="margin-left: 8px; color: var(--accent); font-weight: 600;">
-                {{ "Win" if m.winner_id == current_user.id else "Loss" }}
-            </span>
+        {% if m.outcome_type == 'forfeit' %}
+            <span style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Forfeit</span>
+        {% else %}
+            {% if m.set1_p1 is not none %}
+                <span class="set-score">{{ m.set1_p1 }}-{{ m.set1_p2 }}</span>
+            {% endif %}
+            {% if m.set2_p1 is not none %}
+                <span class="set-score" style="margin-left: 4px;">{{ m.set2_p1 }}-{{ m.set2_p2 }}</span>
+            {% endif %}
+            {% if m.set3_p1 is not none %}
+                <span class="set-score" style="margin-left: 4px;">
+                    {{ m.set3_p1 }}-{{ m.set3_p2 }}
+                    {% if m.set3_tb %}<span style="font-size: 0.75rem; color: var(--text-muted);">({{ m.set3_tb }})</span>{% endif %}
+                </span>
+            {% endif %}
         {% endif %}
     </div>
 </div>
@@ -251,6 +320,31 @@
         var newLen = this.value.length;
         var newPos = pos + (newLen - oldLen);
         this.setSelectionRange(newPos, newPos);
+        validatePhone(this);
+    });
+
+    function validatePhone(el) {
+        var digits = el.value.replace(/\D/g, '');
+        var err = document.getElementById('phone-error');
+        if (el.value && digits.length !== 10) {
+            el.style.borderColor = '#e74c3c';
+            if (err) err.style.display = 'block';
+        } else {
+            el.style.borderColor = '';
+            if (err) err.style.display = 'none';
+        }
+    }
+
+    document.getElementById('profile-form').addEventListener('submit', function(e) {
+        var el = document.getElementById('phone-input');
+        var digits = el.value.replace(/\D/g, '');
+        if (el.value && digits.length !== 10) {
+            e.preventDefault();
+            el.style.borderColor = '#e74c3c';
+            var err = document.getElementById('phone-error');
+            if (err) err.style.display = 'block';
+            el.focus();
+        }
     });
 })();
 </script>

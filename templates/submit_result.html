@@ -1,11 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Submit Result — {{ brand.APP_NAME }}{% endblock %}
+{% block title %}{{ 'Edit' if edit_match else 'Submit' }} Result — {{ brand.APP_NAME }}{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Submit Match Result</h1>
+<h1 class="page-title">{{ 'Edit Match Result' if edit_match else 'Submit Match Result' }}</h1>
 
 <div class="card">
     <form method="POST" action="{{ url_for('submit_result') }}" id="result-form">
+        {% if edit_match %}
+        <input type="hidden" name="edit_match_id" value="{{ edit_match.id }}">
+        {% endif %}
         <div class="form-group">
             <label>Opponent</label>
             <select name="opponent_id" required>
@@ -605,6 +608,48 @@ if (opponentSelect.value) {
     opponentSelect.dispatchEvent(new Event('change'));
 }
 updateFormState();
+
+{% if edit_match %}
+// Pre-fill existing match data
+(function() {
+    outcomeSelect.value = '{{ edit_match.outcome_type }}';
+    outcomeSelect.dispatchEvent(new Event('change'));
+    {% if edit_match.winner_id %}
+    winnerSelect.value = '{{ edit_match.winner_id }}';
+    {% endif %}
+    {% if edit_match.set1_my is not none %}
+    document.querySelector('[name="set1_p1"]').value = '{{ edit_match.set1_my }}';
+    document.querySelector('[name="set1_p2"]').value = '{{ edit_match.set1_opp }}';
+    {% endif %}
+    {% if edit_match.set2_my is not none %}
+    document.querySelector('[name="set2_p1"]').value = '{{ edit_match.set2_my }}';
+    document.querySelector('[name="set2_p2"]').value = '{{ edit_match.set2_opp }}';
+    {% endif %}
+    {% if edit_match.set3_my is not none %}
+    document.querySelector('[name="set3_p1"]').value = '{{ edit_match.set3_my }}';
+    document.querySelector('[name="set3_p2"]').value = '{{ edit_match.set3_opp }}';
+    {% endif %}
+    {% if edit_match.set1_tb %}
+    const tb1parts = '{{ edit_match.set1_tb }}'.split('-');
+    document.querySelector('[name="set1_tb_you"]').value = tb1parts[0] || '';
+    document.querySelector('[name="set1_tb_opp"]').value = tb1parts[1] || '';
+    syncTbHidden(1);
+    {% endif %}
+    {% if edit_match.set2_tb %}
+    const tb2parts = '{{ edit_match.set2_tb }}'.split('-');
+    document.querySelector('[name="set2_tb_you"]').value = tb2parts[0] || '';
+    document.querySelector('[name="set2_tb_opp"]').value = tb2parts[1] || '';
+    syncTbHidden(2);
+    {% endif %}
+    {% if edit_match.set3_tb %}
+    const tb3parts = '{{ edit_match.set3_tb }}'.split('-');
+    document.querySelector('[name="set3_tb_you"]').value = tb3parts[0] || '';
+    document.querySelector('[name="set3_tb_opp"]').value = tb3parts[1] || '';
+    syncTbHidden(3);
+    {% endif %}
+    updateScores();
+})();
+{% endif %}
 
 document.getElementById('result-form').addEventListener('submit', function(e) {
     const outcome = outcomeSelect.value;
