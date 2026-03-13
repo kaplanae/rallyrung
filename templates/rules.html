@@ -3,8 +3,128 @@
 
 {% block content %}
 
-{% if is_hub and not current_ladder_name %}
-{# ===== GENERIC TTL RULES (hub home, no ladder selected) ===== #}
+{% if current_user.is_authenticated or (is_hub and not current_ladder_name) %}
+{% if ladder_sport == 'pickleball' %}
+{# ===== PICKLEBALL RULES ===== #}
+<h1 class="page-title">Pickleball Doubles Ladder Rules</h1>
+
+<div class="card" style="padding: 24px; line-height: 1.7;">
+
+<p>The Cedar Park Pickleball Doubles Ladder is <strong>FREE</strong> for players 18 and over. It's a fun, competitive way to meet local players and play doubles matches on your own schedule — no required match days or weekly commitments. Read the rules below before signing up.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">How It Works</h2>
+
+<ul style="padding-left: 20px;">
+<li>All teams are ranked and listed on the ladder.</li>
+<li>When you join, you are added near others with a similar playing level.</li>
+<li><strong>Each month, teams are grouped in 3's</strong> according to rank. During that month, your team schedules and plays two matches against the other two teams in your group.</li>
+<li>You have the entire month to play your 2 matches. <strong>Contact your opponents within the first week of the month.</strong> Text is best, but email or a phone call works too.</li>
+<li>Some months a group may only have 2 teams, giving one team a bye.</li>
+<li>If your team <strong>fails to play any matches for 2 straight months</strong>, you will be <strong>automatically dropped from the ladder</strong>. You can rejoin the following month from your Profile page.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Partner Selection</h2>
+
+<ul style="padding-left: 20px;">
+<li>Each month, you select a doubles partner from the active players on the ladder.</li>
+<li>Go to <strong>My Group</strong> and use the partner request feature to invite someone. They must accept your request to be confirmed.</li>
+<li>Once confirmed, you and your partner are a team for that month. You play together against the other teams in your group.</li>
+<li>You may change your partner before your matches are played. Either partner can cancel the partnership from My Group.</li>
+<li>Partners do not have to be the same people month to month — mix it up!</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Match Locations</h2>
+
+<p>Players arrange the dates, times, and locations of their matches. Any mutually convenient local pickleball court works. <strong>Be on time — arriving 5 minutes early is the standard.</strong> If you're running late, notify your opponents as early as possible.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Match Format</h2>
+
+<p>The match format is <strong>best of 3 games</strong>. Each game is played to <strong>11 points, win by 2</strong>. If teams split the first two games, a third game is played to 11, win by 2.</p>
+
+<p>Players can agree to modify the format, but the above is the default if no agreement is reached.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Serving Rules</h2>
+
+<ul style="padding-left: 20px;">
+<li><strong>Only the serving team can score points.</strong> If the receiving team wins a rally, they earn the serve but not a point.</li>
+<li>Each player on the serving team serves until they commit a fault, except at the start of the game when only one player serves before the serve passes to the other team (the "first server" exception).</li>
+<li>The serve must be made <strong>underhand</strong>, with the paddle below the wrist and the ball contacted below the waist.</li>
+<li>The serve is made diagonally <strong>crosscourt</strong>, landing in the opposite service box beyond the kitchen (non-volley zone).</li>
+<li>The server must keep both feet behind the baseline when serving. At least one foot must be on the ground when the ball is struck.</li>
+<li>If a serve hits the net and lands in the correct service box, it is a <strong>let</strong> — replay the serve.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">The Kitchen (Non-Volley Zone)</h2>
+
+<ul style="padding-left: 20px;">
+<li>The kitchen is the 7-foot area on both sides of the net.</li>
+<li>You may <strong>not volley</strong> (hit the ball in the air before it bounces) while standing in the kitchen or while your momentum carries you into the kitchen after a volley.</li>
+<li>You <strong>may</strong> enter the kitchen to play a ball that has bounced inside it.</li>
+<li>You must exit the kitchen before volleying again.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">The Two-Bounce Rule</h2>
+
+<p>After the serve, each team must let the ball bounce once before hitting it — the receiving team lets it bounce on the serve, and the serving team lets it bounce on the return. After these two bounces, either team may volley or play off the bounce.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Common Faults</h2>
+
+<ul style="padding-left: 20px;">
+<li>Hitting the ball out of bounds</li>
+<li>Hitting the ball into the net</li>
+<li>Volleying from the kitchen or stepping into the kitchen on a volley follow-through</li>
+<li>Volleying the serve or return of serve (two-bounce rule violation)</li>
+<li>The serve lands in the kitchen or on the kitchen line</li>
+<li>Touching the net or post during play</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Penalties for Late Teams</h2>
+
+<ul style="padding-left: 20px;">
+<li>If a team arrives late, the opposing team may apply a point penalty: <strong>1 point per 5 minutes late</strong>.</li>
+<li>Penalties begin at the scheduled match time.</li>
+<li><strong>The match is a forfeit at 15:01 minutes late.</strong></li>
+<li>If a team arrives before the forfeit time, the late team is to receive a 5-minute warm-up.</li>
+<li>Late penalties apply only when the late arrival is the fault of the arriving team. Exception: courts not available at scheduled time.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Score Reporting</h2>
+
+<p>After the match, <strong>both teams should report the score right away</strong> under <strong>My Group</strong>. One player from each team can report. Possible outcomes:</p>
+
+<ul style="padding-left: 20px;">
+<li><strong>Completed</strong> — The match was played with a winner and final game scores.</li>
+<li><strong>Schedule Problem</strong> — Both teams tried to find a time but couldn't.</li>
+<li><strong>Weather Problem</strong> — Weather prevented the match.</li>
+<li><strong>Injury (match not finished)</strong> — The match started but one team had to retire due to injury. The non-retiring team gets the win, and partial scores are reported.</li>
+<li><strong>Injury (match not played)</strong> — The match never started due to injury or illness. The other team gets the win.</li>
+<li><strong>Forfeit</strong> — One team made no effort to schedule, refused to play, or failed to show up. The other team gets the win.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Monthly Rankings</h2>
+
+<p>At the beginning of the next month, the team with the best record in the group moves up to the next group, and the team with the worst record moves down. The middle team stays. Ties in match wins are broken first by head-to-head record, then by games won vs. games lost.</p>
+
+<p><strong>Partners move together</strong> — both players in a team gain or lose ranking together based on the team's result.</p>
+
+<p>If you change partners month to month, your individual ranking carries over to your new pairing.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Sportsmanship</h2>
+
+<p>This ladder is competitive but friendly. Make calls honestly — if you're not sure, give the benefit of the doubt to your opponents. Be on time, call the score before every serve, and report results promptly. It's OK to lose!</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Ball Recommendations</h2>
+
+<p>Use an outdoor pickleball approved for competitive play (e.g., Dura Fast 40, Franklin X-40, or similar). <strong>Both teams should bring a new ball.</strong> The winning team takes the unopened ball; the losing team takes the used ball.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Waiver of Liability</h2>
+
+<p style="font-size: 0.85rem; color: var(--text-muted);">By signing up for the Cedar Park Pickleball Doubles Ladder, you agree to assume full and complete responsibility for risks, liabilities, and hazards incidental to participation. You agree to indemnify, release, and hold harmless the ladder organizers, {{ brand.APP_NAME }}, and all associated parties from any and all claims arising from participation, including illness, personal injury, death, or property damage. Failure to comply with these rules may result in removal from the ladder.</p>
+
+</div>
+
+{% else %}
+{# ===== TENNIS RULES (logged in, or hub home with no ladder selected) ===== #}
 <h1 class="page-title">Texas Tennis Ladders</h1>
 
 <div class="card" style="padding: 24px; line-height: 1.7;">
@@ -118,8 +238,57 @@
 
 </div>
 
+{% endif %}
+
 {% else %}
 {# ===== GENERIC SINGLE-LADDER RULES ===== #}
+{% if ladder_sport == 'pickleball' %}
+<h1 class="page-title">{{ brand.APP_NAME }} — Pickleball Doubles</h1>
+
+<div class="card" style="padding: 24px; line-height: 1.7;">
+
+<p>{{ brand.APP_NAME }} is <strong>free</strong> for players 18 and over. Play doubles matches on your own schedule — no required match days or weekly commitments. Read the rules below before signing up.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Monthly Groups</h2>
+
+<ul style="padding-left: 20px;">
+<li>Each month your team is placed in a group of 3 teams based on your current rank. You play one match against each of the other two teams sometime during that month.</li>
+<li><strong>Contact your opponents within the first week of the month.</strong> Text is best, but email or a phone call works too.</li>
+<li>You have the full month to play, but don't wait until the last day.</li>
+<li>If your team <strong>fails to play any matches for 2 straight months</strong>, you'll be <strong>automatically dropped from the ladder.</strong> You can rejoin the following month from your Profile page.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Match Format</h2>
+
+<p><strong>Best of 3 games</strong>, each game to <strong>11 points, win by 2</strong>. Players can agree to a different format, but this is the default.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Score Reporting</h2>
+
+<p>After the match, <strong>both teams report the result</strong> under <strong>My Group</strong>. Possible outcomes:</p>
+
+<ul style="padding-left: 20px;">
+<li><strong>Completed</strong> — Match was played with a winner and final game scores.</li>
+<li><strong>Schedule Problem</strong> — Both teams tried to find a time but couldn't.</li>
+<li><strong>Weather Problem</strong> — Weather prevented the match.</li>
+<li><strong>Injury</strong> — One team had to retire or couldn't start due to injury or illness.</li>
+<li><strong>Forfeit</strong> — One team made no effort to schedule or refused to play.</li>
+</ul>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Rankings</h2>
+
+<p>At the end of each month, the team with the best record in the group moves up a rung, the worst record moves down, and the middle team stays. Ties are broken by head-to-head record, then games won/lost. Partners move together.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Sportsmanship</h2>
+
+<p>This ladder is competitive but friendly. Give your opponents the benefit of the doubt on close calls, be on time, and report scores promptly.</p>
+
+<h2 style="margin-top: 32px; margin-bottom: 16px;">Waiver of Liability</h2>
+
+<p style="font-size: 0.85rem; color: var(--text-muted);">By signing up for {{ brand.APP_NAME }}, you agree to assume full responsibility for risks incidental to participation, and to release and hold harmless {{ brand.APP_NAME }}, its organizers, and associated parties from any claims arising from participation in the ladder. Failure to comply with the rules may result in removal from the ladder.</p>
+
+</div>
+
+{% else %}
 <h1 class="page-title">{{ brand.APP_NAME }} — How It Works</h1>
 
 <div class="card" style="padding: 24px; line-height: 1.7;">
@@ -169,6 +338,7 @@
 <p style="font-size: 0.85rem; color: var(--text-muted);">By signing up for {{ brand.APP_NAME }}, you agree to assume full responsibility for risks incidental to participation, and to release and hold harmless {{ brand.APP_NAME }}, its organizers, and associated parties from any claims arising from participation in the ladder. Failure to comply with the rules may result in removal from the ladder.</p>
 
 </div>
+{% endif %}
 {% endif %}
 
 {% endblock %}

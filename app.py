@@ -102,6 +102,11 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+@login_manager.unauthorized_handler
+def unauthorized():
+    from flask import request as req
+    return redirect(url_for('login', _external=True, next=req.path), 302)
+
 # OAuth setup
 oauth = OAuth(app)
 google = None
@@ -366,6 +371,18 @@ def init_db():
             ladder_id INTEGER NOT NULL REFERENCES ladders(id),
             PRIMARY KEY (user_id, ladder_id)
         )''')
+
+        cur.execute('''CREATE TABLE IF NOT EXISTS monthly_partners (
+            id SERIAL PRIMARY KEY,
+            ladder_id INTEGER NOT NULL REFERENCES ladders(id),
+            month INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            requester_id INTEGER NOT NULL REFERENCES users(id),
+            partner_id INTEGER NOT NULL REFERENCES users(id),
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(ladder_id, month, year, requester_id)
+        )''')
     else:
         cur.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -477,6 +494,18 @@ def init_db():
             PRIMARY KEY (user_id, ladder_id)
         )''')
 
+        cur.execute('''CREATE TABLE IF NOT EXISTS monthly_partners (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ladder_id INTEGER NOT NULL REFERENCES ladders(id),
+            month INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            requester_id INTEGER NOT NULL REFERENCES users(id),
+            partner_id INTEGER NOT NULL REFERENCES users(id),
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(ladder_id, month, year, requester_id)
+        )''')
+
     # Migrations: add columns if missing (idempotent)
     try:
         cur.execute("ALTER TABLE matches ADD COLUMN outcome_type TEXT DEFAULT 'completed'")
@@ -538,6 +567,35 @@ def init_db():
     except Exception:
         conn.rollback()
 
+    try:
+        if USE_POSTGRES:
+            cur.execute('''CREATE TABLE IF NOT EXISTS monthly_partners (
+                id SERIAL PRIMARY KEY,
+                ladder_id INTEGER NOT NULL REFERENCES ladders(id),
+                month INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                requester_id INTEGER NOT NULL REFERENCES users(id),
+                partner_id INTEGER NOT NULL REFERENCES users(id),
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(ladder_id, month, year, requester_id)
+            )''')
+        else:
+            cur.execute('''CREATE TABLE IF NOT EXISTS monthly_partners (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ladder_id INTEGER NOT NULL REFERENCES ladders(id),
+                month INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                requester_id INTEGER NOT NULL REFERENCES users(id),
+                partner_id INTEGER NOT NULL REFERENCES users(id),
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(ladder_id, month, year, requester_id)
+            )''')
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
     # Seed default ladder (idempotent)
     cur.execute('SELECT id FROM ladders LIMIT 1')
     if not cur.fetchone():
@@ -557,6 +615,11 @@ def init_db():
     cur.execute("SELECT id FROM ladders WHERE name='Steiner Ranch'")
     if not cur.fetchone():
         cur.execute("INSERT INTO ladders (name, sport, city, ladder_type) VALUES ('Steiner Ranch','tennis','Steiner Ranch','singles')")
+
+    # Cedar Park Pickleball Doubles
+    cur.execute("SELECT id FROM ladders WHERE name='Cedar Park' AND sport='pickleball'")
+    if not cur.fetchone():
+        cur.execute("INSERT INTO ladders (name, sport, city, ladder_type) VALUES ('Cedar Park','pickleball','Cedar Park','doubles')")
 
     conn.commit()
 
@@ -984,6 +1047,39 @@ def validate_tiebreak_score(p1, p2):
     if high > 10 and low == high - 2 and low >= 9:
         return True
     return False
+
+
+def validate_pickleball_game(p1, p2):
+    """Validate a pickleball game score. First to 11, win by 2."""
+    if p1 is None or p2 is None:
+        return True  # optional game
+    if not (isinstance(p1, int) and isinstance(p2, int)):
+        return False
+    if p1 < 0 or p2 < 0:
+        return False
+    high, low = max(p1, p2), min(p1, p2)
+    if high < 11:
+        return False
+    if high == 11 and low <= 9:
+        return True
+    if high > 11 and high - low == 2:
+        return True
+    return False
+
+
+def get_ladder_sport(ladder_id):
+    """Return the sport string for a ladder ('tennis' or 'pickleball')."""
+    if not ladder_id:
+        return 'tennis'
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute(f'SELECT sport FROM ladders WHERE id = {ph}', (ladder_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return dict(row).get('sport', 'tennis') or 'tennis'
+    return 'tennis'
 
 
 def calculate_match_games(match):
@@ -1535,6 +1631,56 @@ def logout():
     return redirect(url_for('index'))
 
 
+@app.route('/robots.txt')
+def robots():
+    from flask import Response
+    brand = get_brand()
+    domain = brand.get('APP_DOMAIN', 'rallyrung.com')
+    content = f"""User-agent: *
+Allow: /
+Allow: /rules
+Allow: /request-ladder
+Disallow: /admin
+Disallow: /profile
+Disallow: /my-group
+Disallow: /availability
+Disallow: /submit-result
+Disallow: /reset-password
+Disallow: /auth/
+
+Sitemap: https://{domain}/sitemap.xml
+"""
+    return Response(content, mimetype='text/plain')
+
+
+@app.route('/sitemap.xml')
+def sitemap():
+    from flask import Response
+    brand = get_brand()
+    domain = brand.get('APP_DOMAIN', 'rallyrung.com')
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+    cur.execute('SELECT id, name, ladder_type FROM ladders ORDER BY id')
+    ladders = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    urls = [
+        f'<url><loc>https://{domain}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>',
+        f'<url><loc>https://{domain}/rules</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>',
+        f'<url><loc>https://{domain}/request-ladder</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>',
+    ]
+    for ladder in ladders:
+        urls.append(f'<url><loc>https://{domain}/ladder/{ladder["id"]}</loc><changefreq>daily</changefreq><priority>0.8</priority></url>')
+
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    xml += '\n'.join(urls)
+    xml += '\n</urlset>'
+    return Response(xml, mimetype='application/xml')
+
+
 @app.route('/choose-ladder')
 @login_required
 def choose_ladder():
@@ -1657,7 +1803,9 @@ def index():
 
 @app.route('/rules')
 def rules():
-    return render_template('rules.html')
+    ladder_id = get_ladder_id()
+    ladder_sport = get_ladder_sport(ladder_id) if ladder_id else 'tennis'
+    return render_template('rules.html', ladder_sport=ladder_sport)
 
 
 @app.route('/courts')
@@ -1850,7 +1998,13 @@ def my_group():
     cur = conn.cursor()
     ph = get_placeholder()
     ladder_id = get_ladder_id()
+    ladder_sport = get_ladder_sport(ladder_id)
     month, year = get_current_month_year()
+
+    my_partner = None
+    my_partner_request_sent = None
+    partner_requests_received = []
+    all_ladder_players = []
 
     # Find the user's group for the current month
     cur.execute(f'''
@@ -1862,7 +2016,8 @@ def my_group():
 
     if not group:
         conn.close()
-        return render_template('my_group.html', group=None, group_players=[], matches=[])
+        return render_template('my_group.html', group=None, group_players=[], matches=[],
+                               ladder_sport=ladder_sport)
 
     group = dict(group)
 
@@ -1936,12 +2091,199 @@ def my_group():
     # Build opponent name lookup
     opponent_names = {p['id']: p['username'] for p in group_players}
 
+    # Partner info for pickleball ladders
+    if ladder_sport == 'pickleball':
+        # Confirmed partner
+        cur.execute(f'''SELECT mp.*, u.username as partner_username, u.email as partner_email, u.phone as partner_phone
+            FROM monthly_partners mp
+            JOIN users u ON (CASE WHEN mp.requester_id = {ph} THEN mp.partner_id ELSE mp.requester_id END) = u.id
+            WHERE mp.ladder_id = {ph} AND mp.month = {ph} AND mp.year = {ph}
+              AND mp.status = 'confirmed'
+              AND (mp.requester_id = {ph} OR mp.partner_id = {ph})
+        ''', (current_user.id, ladder_id, month, year, current_user.id, current_user.id))
+        row = cur.fetchone()
+        if row:
+            my_partner = dict(row)
+
+        if not my_partner:
+            # Pending request I sent
+            cur.execute(f'''SELECT mp.*, u.username as partner_username
+                FROM monthly_partners mp
+                JOIN users u ON mp.partner_id = u.id
+                WHERE mp.ladder_id = {ph} AND mp.month = {ph} AND mp.year = {ph}
+                  AND mp.requester_id = {ph} AND mp.status = 'pending'
+            ''', (ladder_id, month, year, current_user.id))
+            row = cur.fetchone()
+            if row:
+                my_partner_request_sent = dict(row)
+
+            # Requests I received
+            cur.execute(f'''SELECT mp.*, u.username as requester_username
+                FROM monthly_partners mp
+                JOIN users u ON mp.requester_id = u.id
+                WHERE mp.ladder_id = {ph} AND mp.month = {ph} AND mp.year = {ph}
+                  AND mp.partner_id = {ph} AND mp.status = 'pending'
+            ''', (ladder_id, month, year, current_user.id))
+            partner_requests_received = [dict(r) for r in cur.fetchall()]
+
+            # All active players on this ladder (for partner request dropdown)
+            cur.execute(f'''SELECT u.id, u.username FROM users u
+                JOIN ladder_players lp ON u.id = lp.user_id
+                WHERE lp.ladder_id = {ph} AND lp.is_active = {ph} AND u.id != {ph}
+                ORDER BY lp.ranking ASC
+            ''', (ladder_id, True if USE_POSTGRES else 1, current_user.id))
+            all_ladder_players = [dict(r) for r in cur.fetchall()]
+
     conn.close()
     return render_template('my_group.html', group=group, group_players=group_players,
                            matches=matches, standings=standings, availability=availability,
                            bookings=bookings, opponent_slots=opponent_slots,
                            opponent_ids=opponent_ids, opponent_names=opponent_names,
-                           DAY_NAMES=DAY_NAMES)
+                           DAY_NAMES=DAY_NAMES, ladder_sport=ladder_sport,
+                           my_partner=my_partner,
+                           my_partner_request_sent=my_partner_request_sent,
+                           partner_requests_received=partner_requests_received,
+                           all_ladder_players=all_ladder_players)
+
+
+@app.route('/partner/request', methods=['POST'])
+@login_required
+def partner_request():
+    ladder_id = get_ladder_id()
+    month, year = get_current_month_year()
+    partner_id = int(request.form.get('partner_id', 0))
+    if not partner_id or partner_id == current_user.id:
+        flash('Invalid partner selection.')
+        return redirect(url_for('my_group'))
+
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    # Check partner is on the same ladder
+    cur.execute(f'SELECT id FROM ladder_players WHERE user_id = {ph} AND ladder_id = {ph} AND is_active = {ph}',
+                (partner_id, ladder_id, True if USE_POSTGRES else 1))
+    if not cur.fetchone():
+        conn.close()
+        flash('That player is not on this ladder.')
+        return redirect(url_for('my_group'))
+
+    # Check if we already have a confirmed partner this month
+    cur.execute(f'''SELECT id FROM monthly_partners
+        WHERE ladder_id = {ph} AND month = {ph} AND year = {ph}
+          AND status = 'confirmed'
+          AND (requester_id = {ph} OR partner_id = {ph})
+    ''', (ladder_id, month, year, current_user.id, current_user.id))
+    if cur.fetchone():
+        conn.close()
+        flash('You already have a confirmed partner this month.')
+        return redirect(url_for('my_group'))
+
+    # Upsert request (delete old pending one first)
+    cur.execute(f'''DELETE FROM monthly_partners
+        WHERE ladder_id = {ph} AND month = {ph} AND year = {ph}
+          AND requester_id = {ph} AND status = 'pending'
+    ''', (ladder_id, month, year, current_user.id))
+
+    cur.execute(f'''INSERT INTO monthly_partners (ladder_id, month, year, requester_id, partner_id, status)
+        VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, 'pending')
+    ''', (ladder_id, month, year, current_user.id, partner_id))
+    conn.commit()
+    conn.close()
+    flash('Partner request sent! They need to confirm.')
+    return redirect(url_for('my_group'))
+
+
+@app.route('/partner/confirm/<int:req_id>', methods=['POST'])
+@login_required
+def partner_confirm(req_id):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT * FROM monthly_partners WHERE id = {ph}', (req_id,))
+    req = cur.fetchone()
+    if not req:
+        conn.close()
+        flash('Request not found.')
+        return redirect(url_for('my_group'))
+    req = dict(req)
+
+    if req['partner_id'] != current_user.id:
+        conn.close()
+        flash('Not your request to confirm.')
+        return redirect(url_for('my_group'))
+
+    if req['status'] != 'pending':
+        conn.close()
+        flash('This request is no longer pending.')
+        return redirect(url_for('my_group'))
+
+    cur.execute(f"UPDATE monthly_partners SET status = 'confirmed' WHERE id = {ph}", (req_id,))
+    # Also cancel any other pending requests involving either player this month
+    cur.execute(f'''DELETE FROM monthly_partners
+        WHERE ladder_id = {ph} AND month = {ph} AND year = {ph}
+          AND status = 'pending'
+          AND id != {ph}
+          AND (requester_id IN ({ph}, {ph}) OR partner_id IN ({ph}, {ph}))
+    ''', (req['ladder_id'], req['month'], req['year'], req_id,
+          req['requester_id'], req['partner_id'], req['requester_id'], req['partner_id']))
+    conn.commit()
+    conn.close()
+    flash('Partner confirmed! You are now teammates this month.')
+    return redirect(url_for('my_group'))
+
+
+@app.route('/partner/decline/<int:req_id>', methods=['POST'])
+@login_required
+def partner_decline(req_id):
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'SELECT * FROM monthly_partners WHERE id = {ph}', (req_id,))
+    req = cur.fetchone()
+    if not req:
+        conn.close()
+        flash('Request not found.')
+        return redirect(url_for('my_group'))
+    req = dict(req)
+
+    if req['partner_id'] != current_user.id and req['requester_id'] != current_user.id:
+        conn.close()
+        flash('Not your request.')
+        return redirect(url_for('my_group'))
+
+    cur.execute(f"UPDATE monthly_partners SET status = 'declined' WHERE id = {ph}", (req_id,))
+    conn.commit()
+    conn.close()
+    flash('Partner request declined.')
+    return redirect(url_for('my_group'))
+
+
+@app.route('/partner/cancel', methods=['POST'])
+@login_required
+def partner_cancel():
+    ladder_id = get_ladder_id()
+    month, year = get_current_month_year()
+    conn = get_db()
+    cur = conn.cursor()
+    ph = get_placeholder()
+
+    cur.execute(f'''DELETE FROM monthly_partners
+        WHERE ladder_id = {ph} AND month = {ph} AND year = {ph}
+          AND requester_id = {ph} AND status = 'pending'
+    ''', (ladder_id, month, year, current_user.id))
+    # Also clear confirmed partnerships involving current user this month
+    cur.execute(f'''DELETE FROM monthly_partners
+        WHERE ladder_id = {ph} AND month = {ph} AND year = {ph}
+          AND (requester_id = {ph} OR partner_id = {ph})
+          AND status = 'confirmed'
+    ''', (ladder_id, month, year, current_user.id, current_user.id))
+    conn.commit()
+    conn.close()
+    flash('Partner request cancelled.')
+    return redirect(url_for('my_group'))
 
 
 @app.route('/submit-result', methods=['GET', 'POST'])
@@ -1951,6 +2293,8 @@ def submit_result():
     cur = conn.cursor()
     ph = get_placeholder()
     ladder_id = get_ladder_id()
+    ladder_sport = get_ladder_sport(ladder_id)
+    is_pickleball = ladder_sport == 'pickleball'
     month, year = get_current_month_year()
 
     # Find the user's group
@@ -2035,61 +2379,82 @@ def submit_result():
                         conn.close()
                         return redirect(url_for('submit_result'))
                     if outcome_type == 'completed':
-                        if s == 1 and not validate_set_score(p1_val, p2_val):
-                            flash(f'Set 1 score {p1_val}-{p2_val} is not a valid tennis score.')
-                            conn.close()
-                            return redirect(url_for('submit_result'))
-                        if s == 2:
-                            # Allow 1-0/0-1 for match tiebreak in lieu of full set
-                            is_tb_set = (p1_val == 1 and p2_val == 0) or (p1_val == 0 and p2_val == 1)
-                            if not is_tb_set and not validate_set_score(p1_val, p2_val):
-                                flash(f'Set 2 score {p1_val}-{p2_val} is not a valid tennis score.')
+                        if is_pickleball:
+                            if not validate_pickleball_game(p1_val, p2_val):
+                                flash(f'Game {s} score {p1_val}-{p2_val} is not a valid pickleball score. Games go to 11, win by 2.')
                                 conn.close()
                                 return redirect(url_for('submit_result'))
-                        if s == 3:
-                            # Set 3 must be 1-0 or 0-1 (match tiebreak)
-                            is_tb_set3 = (p1_val == 1 and p2_val == 0) or (p1_val == 0 and p2_val == 1)
-                            if not is_tb_set3:
-                                flash(f'Set 3 must be reported as 1-0 or 0-1 (match tiebreak).')
+                        else:
+                            if s == 1 and not validate_set_score(p1_val, p2_val):
+                                flash(f'Set 1 score {p1_val}-{p2_val} is not a valid tennis score.')
                                 conn.close()
                                 return redirect(url_for('submit_result'))
+                            if s == 2:
+                                # Allow 1-0/0-1 for match tiebreak in lieu of full set
+                                is_tb_set = (p1_val == 1 and p2_val == 0) or (p1_val == 0 and p2_val == 1)
+                                if not is_tb_set and not validate_set_score(p1_val, p2_val):
+                                    flash(f'Set 2 score {p1_val}-{p2_val} is not a valid tennis score.')
+                                    conn.close()
+                                    return redirect(url_for('submit_result'))
+                            if s == 3:
+                                # Set 3 must be 1-0 or 0-1 (match tiebreak)
+                                is_tb_set3 = (p1_val == 1 and p2_val == 0) or (p1_val == 0 and p2_val == 1)
+                                if not is_tb_set3:
+                                    flash(f'Set 3 must be reported as 1-0 or 0-1 (match tiebreak).')
+                                    conn.close()
+                                    return redirect(url_for('submit_result'))
                     sets[s - 1] = (p1_val, p2_val)
 
             if outcome_type == 'completed':
                 if sets[0] == (None, None) or sets[1] == (None, None):
-                    flash('At least 2 sets are required.')
+                    label = 'games' if is_pickleball else 'sets'
+                    flash(f'At least 2 {label} are required.')
                     conn.close()
                     return redirect(url_for('submit_result'))
 
-                # Check if sets are split and 3rd set is needed
-                s1_winner_p1 = sets[0][0] > sets[0][1]
-                s2_tb = (sets[1][0] == 1 and sets[1][1] == 0) or (sets[1][0] == 0 and sets[1][1] == 1)
-                if not s2_tb:
+                if is_pickleball:
+                    # Pickleball: best of 3 games
+                    s1_winner_p1 = sets[0][0] > sets[0][1]
                     s2_winner_p1 = sets[1][0] > sets[1][1]
                     if s1_winner_p1 != s2_winner_p1:
-                        # Split sets — need set 3
                         if sets[2] == (None, None):
-                            flash('Sets are split 1-1. A 3rd set tiebreak is required.')
+                            flash('Games are split 1-1. A 3rd game is required.')
                             conn.close()
                             return redirect(url_for('submit_result'))
-
-                # Verify winner matches scores
-                p1_sets = 0
-                for s in range(3):
-                    if sets[s] == (None, None):
-                        continue
-                    if sets[s][0] > sets[s][1]:
-                        p1_sets += 1
-                p2_sets = sum(1 for s in range(3) if sets[s] != (None, None)) - p1_sets
-                # p1 is current_user at this point (before reorder)
-                my_sets = p1_sets
-                opp_sets = p2_sets
-                winner_is_me = winner_id == current_user.id
-                winner_sets = my_sets if winner_is_me else opp_sets
-                if winner_sets < 2:
-                    flash('Scores do not match winner.')
-                    conn.close()
-                    return redirect(url_for('submit_result'))
+                    my_games_won = sum(1 for s in range(3) if sets[s] != (None, None) and sets[s][0] > sets[s][1])
+                    opp_games_won = sum(1 for s in range(3) if sets[s] != (None, None) and sets[s][1] > sets[s][0])
+                    winner_is_me = winner_id == current_user.id
+                    winner_games = my_games_won if winner_is_me else opp_games_won
+                    if winner_games < 2:
+                        flash('Scores do not match winner.')
+                        conn.close()
+                        return redirect(url_for('submit_result'))
+                else:
+                    # Tennis: check if sets are split and 3rd set is needed
+                    s1_winner_p1 = sets[0][0] > sets[0][1]
+                    s2_tb = (sets[1][0] == 1 and sets[1][1] == 0) or (sets[1][0] == 0 and sets[1][1] == 1)
+                    if not s2_tb:
+                        s2_winner_p1 = sets[1][0] > sets[1][1]
+                        if s1_winner_p1 != s2_winner_p1:
+                            if sets[2] == (None, None):
+                                flash('Sets are split 1-1. A 3rd set tiebreak is required.')
+                                conn.close()
+                                return redirect(url_for('submit_result'))
+                    p1_sets = 0
+                    for s in range(3):
+                        if sets[s] == (None, None):
+                            continue
+                        if sets[s][0] > sets[s][1]:
+                            p1_sets += 1
+                    p2_sets = sum(1 for s in range(3) if sets[s] != (None, None)) - p1_sets
+                    my_sets = p1_sets
+                    opp_sets = p2_sets
+                    winner_is_me = winner_id == current_user.id
+                    winner_sets = my_sets if winner_is_me else opp_sets
+                    if winner_sets < 2:
+                        flash('Scores do not match winner.')
+                        conn.close()
+                        return redirect(url_for('submit_result'))
 
         # Check for duplicate submission (skip when editing existing match)
         if not edit_match_id:
@@ -2208,7 +2573,8 @@ def submit_result():
     conn.close()
     preselect_opponent = edit_match['opponent_id'] if edit_match else request.args.get('opponent_id', type=int)
     return render_template('submit_result.html', group=group, opponents=opponents,
-                           preselect_opponent=preselect_opponent, edit_match=edit_match)
+                           preselect_opponent=preselect_opponent, edit_match=edit_match,
+                           ladder_sport=ladder_sport)
 
 
 @app.route('/confirm-match/<int:match_id>', methods=['POST'])
@@ -3785,6 +4151,7 @@ def admin_generate_groups():
     ''', (ladder_id, month, year))
     old_groups = [dict(r)['id'] for r in cur.fetchall()]
     for gid in old_groups:
+        cur.execute(f'DELETE FROM match_bookings WHERE group_id = {ph}', (gid,))
         cur.execute(f'DELETE FROM matches WHERE group_id = {ph}', (gid,))
     cur.execute(f'''
         DELETE FROM monthly_groups
@@ -4233,7 +4600,6 @@ def admin_new_month():
     """One-click: run monthly reset for the last completed month, then generate
     groups for the current month. This is the normal end-of-month workflow."""
     ladder_id = get_ladder_id()
-    new_month, new_year = get_current_month_year()
 
     conn = get_db()
     cur = conn.cursor()
@@ -4253,11 +4619,11 @@ def admin_new_month():
         return redirect(url_for('admin'))
     old_month, old_year = recent['month'], recent['year']
 
-    # If the most recent groups are already for the new month, skip the reset
-    if old_month == new_month and old_year == new_year:
-        conn.close()
-        flash(f'Groups for {new_month}/{new_year} already exist. Delete them first to re-generate.')
-        return redirect(url_for('admin'))
+    # New month is always one month after the most recent groups
+    if old_month == 12:
+        new_month, new_year = 1, old_year + 1
+    else:
+        new_month, new_year = old_month + 1, old_year
 
     # ── STEP 1: Run the monthly reset for old_month/old_year ─────────────────
     cur.execute(f'''

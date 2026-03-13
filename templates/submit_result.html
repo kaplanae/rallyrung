@@ -10,7 +10,7 @@
         <input type="hidden" name="edit_match_id" value="{{ edit_match.id }}">
         {% endif %}
         <div class="form-group">
-            <label>Opponent</label>
+            <label>Opponent{{ ' Team' if ladder_sport == 'pickleball' else '' }}</label>
             <select name="opponent_id" required>
                 {% if opponents|length == 1 %}
                     <option value="{{ opponents[0].id }}" selected>{{ opponents[0].username }}</option>
@@ -39,24 +39,33 @@
             <label>Winner</label>
             <select name="winner_id" id="winner-select">
                 <option value="">Select winner...</option>
-                <option value="{{ current_user.id }}">Me ({{ current_user.username }})</option>
+                <option value="{{ current_user.id }}">{% if ladder_sport == 'pickleball' %}My team ({{ current_user.username }}){% else %}Me ({{ current_user.username }}){% endif %}</option>
             </select>
         </div>
 
         <div style="margin: 20px 0;" id="scores-section">
+            {% if ladder_sport == 'pickleball' %}
+            <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                Game Scores <span style="font-weight: 400; text-transform: none;">(your score first &middot; games to 11, win by 2)</span>
+            </label>
+            {% else %}
             <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
                 Set Scores <span style="font-weight: 400; text-transform: none;">(your score first)</span>
             </label>
+            {% endif %}
 
             <div id="set-status" style="margin-bottom: 12px; font-size: 0.9rem; color: var(--accent); font-weight: 600; display: none;"></div>
 
+            {% set score_label = 'Game' if ladder_sport == 'pickleball' else 'Set' %}
+
             <div class="set-score-row" id="set1-row">
-                <label>Set 1</label>
+                <label>{{ score_label }} 1</label>
                 <input type="text" inputmode="numeric" maxlength="2" name="set1_p1" placeholder="You" autocomplete="off">
                 <span class="dash">—</span>
                 <input type="text" inputmode="numeric" maxlength="2" name="set1_p2" placeholder="Opp" autocomplete="off">
                 <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
             </div>
+            {% if ladder_sport != 'pickleball' %}
             <div class="set-tb-row" id="set1-tb-row" style="display: none; margin-left: 58px; margin-bottom: 10px;">
                 <label style="font-size: 0.8rem; color: var(--text-muted); margin-right: 8px;">TB:</label>
                 <input type="text" inputmode="numeric" maxlength="2" name="set1_tb_you" placeholder="You" autocomplete="off" style="width: 45px; padding: 6px; text-align: center; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem;">
@@ -65,14 +74,16 @@
                 <span class="tb-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-left: 8px;">First to 7, win by 2</span>
                 <input type="hidden" name="set1_tb">
             </div>
+            {% endif %}
 
             <div class="set-score-row" id="set2-row">
-                <label>Set 2</label>
+                <label>{{ score_label }} 2</label>
                 <input type="text" inputmode="numeric" maxlength="2" name="set2_p1" placeholder="You" autocomplete="off">
                 <span class="dash">—</span>
                 <input type="text" inputmode="numeric" maxlength="2" name="set2_p2" placeholder="Opp" autocomplete="off">
                 <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
             </div>
+            {% if ladder_sport != 'pickleball' %}
             <div class="set-tb-row" id="set2-tb-row" style="display: none; margin-left: 58px; margin-bottom: 10px;">
                 <label style="font-size: 0.8rem; color: var(--text-muted); margin-right: 8px;">TB:</label>
                 <input type="text" inputmode="numeric" maxlength="2" name="set2_tb_you" placeholder="You" autocomplete="off" style="width: 45px; padding: 6px; text-align: center; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem;">
@@ -81,15 +92,17 @@
                 <span class="tb-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-left: 8px;">First to 7, win by 2</span>
                 <input type="hidden" name="set2_tb">
             </div>
+            {% endif %}
 
             <div class="set-score-row" id="set3-row" style="display: none;">
-                <label>Set 3</label>
+                <label>{{ score_label }} 3</label>
                 <input type="text" inputmode="numeric" maxlength="2" name="set3_p1" placeholder="You" autocomplete="off">
                 <span class="dash">—</span>
                 <input type="text" inputmode="numeric" maxlength="2" name="set3_p2" placeholder="Opp" autocomplete="off">
                 <span class="set-validation" style="font-size: 0.8rem; margin-left: 8px;"></span>
                 <span class="set3-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-left: 4px;"></span>
             </div>
+            {% if ladder_sport != 'pickleball' %}
             <div class="set-tb-row" id="set3-tb-row" style="display: none; margin-left: 58px; margin-bottom: 10px;">
                 <label style="font-size: 0.8rem; color: var(--text-muted); margin-right: 8px;">TB:</label>
                 <input type="text" inputmode="numeric" maxlength="2" name="set3_tb_you" placeholder="You" autocomplete="off" style="width: 45px; padding: 6px; text-align: center; border: 1px solid var(--border); border-radius: 4px; font-size: 0.9rem;">
@@ -98,6 +111,7 @@
                 <span class="tb-hint" style="font-size: 0.75rem; color: var(--text-muted); margin-left: 8px;">First to 10, win by 2</span>
                 <input type="hidden" name="set3_tb">
             </div>
+            {% endif %}
         </div>
 
         <div style="display: flex; gap: 12px;">
@@ -110,6 +124,7 @@
 
 {% block scripts %}
 <script>
+const IS_PICKLEBALL = {{ 'true' if ladder_sport == 'pickleball' else 'false' }};
 const outcomeSelect = document.getElementById('outcome-type');
 const opponentSelect = document.querySelector('[name="opponent_id"]');
 const winnerGroup = document.getElementById('winner-group');
@@ -128,46 +143,31 @@ const myId = '{{ current_user.id }}';
 const myName = '{{ current_user.username }}';
 const opponents = { {% for opp in opponents %}'{{ opp.id }}': '{{ opp.username }}'{% if not loop.last %}, {% endif %}{% endfor %} };
 
-const VALID_SCORES = [
+const VALID_TENNIS_SCORES = [
     [6,0],[6,1],[6,2],[6,3],[6,4],[7,5],[7,6],
     [0,6],[1,6],[2,6],[3,6],[4,6],[5,7],[6,7]
 ];
-
-function isValidSet(a, b) {
-    return VALID_SCORES.some(v => v[0] === a && v[1] === b);
-}
-
-function isValidSet2(a, b) {
-    // Set 2 also allows 1-0 / 0-1 (match tiebreak in lieu of full set)
+function isValidTennisSet(a, b) { return VALID_TENNIS_SCORES.some(v => v[0] === a && v[1] === b); }
+function isValidTennisSet2(a, b) {
     if ((a === 1 && b === 0) || (a === 0 && b === 1)) return true;
-    return isValidSet(a, b);
+    return isValidTennisSet(a, b);
 }
-
-function isValidSet3(a, b) {
-    // Set 3 allows full set scores OR 1-0/0-1 for 10-point tiebreak
+function isValidTennisSet3(a, b) {
     if ((a === 1 && b === 0) || (a === 0 && b === 1)) return true;
-    return isValidSet(a, b);
+    return isValidTennisSet(a, b);
 }
-
-function isMatchTiebreakSet(a, b) {
-    // 1-0 or 0-1 means match tiebreak played instead of full set
-    return (a === 1 && b === 0) || (a === 0 && b === 1);
-}
-
+function isMatchTiebreakSet(a, b) { return (a === 1 && b === 0) || (a === 0 && b === 1); }
+function isSetTiebreak(a, b) { return (a === 7 && b === 6) || (a === 6 && b === 7); }
 function isValidTiebreak(a, b) {
     if (a < 0 || b < 0) return false;
     const high = Math.max(a, b), low = Math.min(a, b);
-    const diff = high - low;
-    if (diff < 2) return false;
-    // 10-point match tiebreak
+    if (high - low < 2) return false;
     if (high === 10 && low <= 8) return true;
     if (high > 10 && low === high - 2 && low >= 9) return true;
-    // 7-point match tiebreak
     if (high === 7 && low <= 5) return true;
     if (high > 7 && high < 10 && low === high - 2 && low >= 6) return true;
     return false;
 }
-
 function isValid10PointTiebreak(a, b) {
     if (a < 0 || b < 0) return false;
     const high = Math.max(a, b), low = Math.min(a, b);
@@ -176,251 +176,138 @@ function isValid10PointTiebreak(a, b) {
     if (high > 10 && low === high - 2 && low >= 9) return true;
     return false;
 }
-
-function isSetTiebreak(a, b) {
-    // 7-6 or 6-7
-    return (a === 7 && b === 6) || (a === 6 && b === 7);
+function isValidPickleballGame(a, b) {
+    if (a < 0 || b < 0) return false;
+    const high = Math.max(a, b), low = Math.min(a, b);
+    if (high < 11) return false;
+    if (high === 11 && low <= 9) return true;
+    if (high > 11 && high - low === 2) return true;
+    return false;
 }
+function isValidGame(a, b) { return IS_PICKLEBALL ? isValidPickleballGame(a, b) : isValidTennisSet(a, b); }
+function isValidGame2(a, b) { return IS_PICKLEBALL ? isValidPickleballGame(a, b) : isValidTennisSet2(a, b); }
+function isValidGame3(a, b) { return IS_PICKLEBALL ? isValidPickleballGame(a, b) : isValidTennisSet3(a, b); }
 
-function getSetScores(setNum) {
-    const p1 = document.querySelector(`[name="set${setNum}_p1"]`).value.trim();
-    const p2 = document.querySelector(`[name="set${setNum}_p2"]`).value.trim();
+function getSetScores(n) {
+    const p1 = document.querySelector(`[name="set${n}_p1"]`).value.trim();
+    const p2 = document.querySelector(`[name="set${n}_p2"]`).value.trim();
     if (p1 === '' || p2 === '') return null;
     return [parseInt(p1), parseInt(p2)];
 }
-
-function youWonSet(scores) {
-    return scores[0] > scores[1];
-}
-
+function youWonSet(s) { return s[0] > s[1]; }
 function getWinnerName() {
     const wid = winnerSelect.value;
     if (!wid) return null;
-    if (wid === myId) return myName;
-    return opponents[wid] || null;
+    return wid === myId ? myName : (opponents[wid] || null);
 }
-
-function getWinnerId() {
-    return winnerSelect.value || null;
-}
-
-function syncTbHidden(setNum) {
-    const you = document.querySelector(`[name="set${setNum}_tb_you"]`).value.trim();
-    const opp = document.querySelector(`[name="set${setNum}_tb_opp"]`).value.trim();
-    document.querySelector(`[name="set${setNum}_tb"]`).value = (you && opp) ? `${you}-${opp}` : '';
+function getWinnerId() { return winnerSelect.value || null; }
+function syncTbHidden(n) {
+    const youEl = document.querySelector(`[name="set${n}_tb_you"]`);
+    const oppEl = document.querySelector(`[name="set${n}_tb_opp"]`);
+    const hidEl = document.querySelector(`[name="set${n}_tb"]`);
+    if (!youEl || !oppEl || !hidEl) return;
+    hidEl.value = (youEl.value.trim() && oppEl.value.trim()) ? `${youEl.value.trim()}-${oppEl.value.trim()}` : '';
 }
 
 function updateScores() {
     const outcome = outcomeSelect.value;
     if (outcome !== 'completed') return;
-
     const winnerId = getWinnerId();
     const winnerIsMe = winnerId === myId;
-
     const s1 = getSetScores(1);
     const s2 = getSetScores(2);
 
-    // Validate set 1 — valid score gets green check, anything else is allowed (incomplete)
     const v1 = set1Row.querySelector('.set-validation');
-    if (s1) {
-        if (isValidSet(s1[0], s1[1])) {
-            v1.textContent = '✓';
-            v1.style.color = '#2ecc71';
-            if (isSetTiebreak(s1[0], s1[1])) {
-                set1TbRow.style.display = 'flex';
-                set1TbRow.style.alignItems = 'center';
-            } else {
-                set1TbRow.style.display = 'none';
-                set1TbRow.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
-                document.querySelector('[name="set1_tb"]').value = '';
-            }
-        } else {
-            v1.textContent = '';
-            set1TbRow.style.display = 'none';
+    if (s1 && isValidGame(s1[0], s1[1])) {
+        v1.textContent = '✓'; v1.style.color = '#2ecc71';
+        if (!IS_PICKLEBALL && set1TbRow) {
+            if (isSetTiebreak(s1[0], s1[1])) { set1TbRow.style.display = 'flex'; set1TbRow.style.alignItems = 'center'; }
+            else { set1TbRow.style.display = 'none'; set1TbRow.querySelectorAll('input[type="text"]').forEach(i => i.value=''); const h=document.querySelector('[name="set1_tb"]'); if(h) h.value=''; }
         }
     } else {
         v1.textContent = '';
-        set1TbRow.style.display = 'none';
+        if (!IS_PICKLEBALL && set1TbRow) set1TbRow.style.display = 'none';
     }
 
-    // Validate set 2 — valid score gets green check, anything else is allowed (incomplete)
     const v2 = set2Row.querySelector('.set-validation');
-    const set2IsTiebreak = s2 && isMatchTiebreakSet(s2[0], s2[1]);
-    if (s2) {
-        if (isValidSet2(s2[0], s2[1])) {
-            v2.textContent = '✓';
-            v2.style.color = '#2ecc71';
-            if (isSetTiebreak(s2[0], s2[1]) || set2IsTiebreak) {
-                set2TbRow.style.display = 'flex';
-                set2TbRow.style.alignItems = 'center';
-            } else {
-                set2TbRow.style.display = 'none';
-                set2TbRow.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
-                document.querySelector('[name="set2_tb"]').value = '';
-            }
-        } else {
-            v2.textContent = '';
-            set2TbRow.style.display = 'none';
+    const s2IsTB = !IS_PICKLEBALL && s2 && isMatchTiebreakSet(s2[0], s2[1]);
+    if (s2 && isValidGame2(s2[0], s2[1])) {
+        v2.textContent = '✓'; v2.style.color = '#2ecc71';
+        if (!IS_PICKLEBALL && set2TbRow) {
+            if (isSetTiebreak(s2[0], s2[1]) || s2IsTB) { set2TbRow.style.display = 'flex'; set2TbRow.style.alignItems = 'center'; }
+            else { set2TbRow.style.display = 'none'; set2TbRow.querySelectorAll('input[type="text"]').forEach(i => i.value=''); const h=document.querySelector('[name="set2_tb"]'); if(h) h.value=''; }
         }
     } else {
         v2.textContent = '';
-        set2TbRow.style.display = 'none';
+        if (!IS_PICKLEBALL && set2TbRow) set2TbRow.style.display = 'none';
     }
 
-    // Show set status and decide if match tiebreak (set 3) is needed
-    const s1Valid = s1 && isValidSet(s1[0], s1[1]);
-    const s2Valid = s2 && isValidSet2(s2[0], s2[1]);
+    const s1Valid = s1 && isValidGame(s1[0], s1[1]);
+    const s2Valid = s2 && isValidGame2(s2[0], s2[1]);
 
     if (s1Valid && s2Valid) {
         const winnerName = getWinnerName();
-
-        if (set2IsTiebreak) {
-            // 1-0 means match tiebreak played instead of full 2nd set — match is decided
+        if (!IS_PICKLEBALL && s2IsTB) {
             set3Row.style.display = 'none';
-            set3TbRow.style.display = 'none';
-            set3Row.querySelectorAll('input').forEach(inp => inp.value = '');
-            set3TbRow.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
-            document.querySelector('[name="set3_tb"]') && (document.querySelector('[name="set3_tb"]').value = '');
+            if (set3TbRow) set3TbRow.style.display = 'none';
+            set3Row.querySelectorAll('input').forEach(i => i.value = '');
             set3Row.querySelector('.set-validation').textContent = '';
-            const set3HintTB = set3Row.querySelector('.set3-hint');
-            if (set3HintTB) set3HintTB.textContent = '';
             if (winnerId) {
-                // Check: winner must have won set 1 and the TB set
-                const winnerWonS1 = winnerIsMe ? youWonSet(s1) : !youWonSet(s1);
-                const winnerWonTB = winnerIsMe ? (s2[0] === 1) : (s2[1] === 1);
-                if (!winnerWonS1 || !winnerWonTB) {
-                    setStatus.textContent = 'Scores do not match winner';
-                    setStatus.style.color = '#e74c3c';
-                    setStatus.style.display = '';
-                } else {
-                    setStatus.textContent = `${winnerName} wins 2-0 (match tiebreak)`;
-                    setStatus.style.color = 'var(--accent)';
-                    setStatus.style.display = '';
-                }
+                const wS1 = winnerIsMe ? youWonSet(s1) : !youWonSet(s1);
+                const wTB = winnerIsMe ? (s2[0]===1) : (s2[1]===1);
+                setStatus.textContent = (!wS1||!wTB) ? 'Scores do not match winner' : `${winnerName} wins 2-0 (match tiebreak)`;
+                setStatus.style.color = (!wS1||!wTB) ? '#e74c3c' : 'var(--accent)';
+                setStatus.style.display = '';
             }
         } else {
-            const mySetWins = (youWonSet(s1) ? 1 : 0) + (youWonSet(s2) ? 1 : 0);
-            const oppSetWins = 2 - mySetWins;
-
-            if (mySetWins === 1 && oppSetWins === 1) {
-                // Split — show set 3
+            const myW = (youWonSet(s1)?1:0)+(youWonSet(s2)?1:0);
+            const oppW = 2-myW;
+            if (myW===1 && oppW===1) {
                 set3Row.style.display = '';
-                setStatus.textContent = 'Sets tied 1-1 — enter set 3 score or 1-0/0-1 for 10-point tiebreak';
+                setStatus.textContent = IS_PICKLEBALL ? 'Games tied 1-1 — enter game 3 score' : 'Sets tied 1-1 — enter set 3 score or 1-0/0-1 for 10-point tiebreak';
                 setStatus.style.display = '';
-
                 const s3 = getSetScores(3);
                 const v3 = set3Row.querySelector('.set-validation');
-                const set3Hint = set3Row.querySelector('.set3-hint');
-                if (s3) {
-                    if (isMatchTiebreakSet(s3[0], s3[1])) {
-                        // 10-point tiebreak format
-                        v3.textContent = '✓';
-                        v3.style.color = '#2ecc71';
-                        set3Hint.textContent = '';
-                        // Show TB detail row for 10-point tiebreak
-                        set3TbRow.style.display = 'flex';
-                        set3TbRow.style.alignItems = 'center';
-                        // Update TB hint to show "First to 10"
-                        const tbHint3 = set3TbRow.querySelector('.tb-hint');
-                        if (tbHint3) tbHint3.textContent = 'First to 10, win by 2';
-
-                        // Check if TB score is filled and valid
-                        const tbVal = document.querySelector('[name="set3_tb"]').value;
-                        if (tbVal && winnerId) {
-                            const parts = tbVal.split('-');
-                            if (parts.length === 2) {
-                                const tbA = parseInt(parts[0]), tbB = parseInt(parts[1]);
-                                if (isValid10PointTiebreak(tbA, tbB)) {
-                                    const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
-                                    const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
-                                    const winnerSetsWon = winnerIsMe ? finalMyWins : finalOppWins;
-                                    if (winnerSetsWon < 2) {
-                                        setStatus.textContent = 'Scores do not match winner';
-                                        setStatus.style.color = '#e74c3c';
-                                    } else {
-                                        setStatus.textContent = `${winnerName} wins ${winnerIsMe ? finalMyWins : finalOppWins}-${winnerIsMe ? finalOppWins : finalMyWins}`;
-                                        setStatus.style.color = 'var(--accent)';
-                                    }
-                                }
-                            }
-                        }
-                    } else if (isValidSet(s3[0], s3[1])) {
-                        // Full third set
-                        v3.textContent = '✓';
-                        v3.style.color = '#2ecc71';
-                        set3Hint.textContent = '';
-                        if (isSetTiebreak(s3[0], s3[1])) {
-                            // 7-6 in set 3 — show TB row with "First to 7"
-                            set3TbRow.style.display = 'flex';
-                            set3TbRow.style.alignItems = 'center';
-                            const tbHint3 = set3TbRow.querySelector('.tb-hint');
-                            if (tbHint3) tbHint3.textContent = 'First to 7, win by 2';
-                        } else {
-                            set3TbRow.style.display = 'none';
-                            set3TbRow.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
-                            document.querySelector('[name="set3_tb"]').value = '';
-                        }
-
-                        // Check winner matches
-                        if (winnerId) {
-                            const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
-                            const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
-                            const winnerSetsWon = winnerIsMe ? finalMyWins : finalOppWins;
-                            if (winnerSetsWon < 2) {
-                                setStatus.textContent = 'Scores do not match winner';
-                                setStatus.style.color = '#e74c3c';
-                            } else {
-                                setStatus.textContent = `${winnerName} wins ${winnerIsMe ? finalMyWins : finalOppWins}-${winnerIsMe ? finalOppWins : finalMyWins}`;
-                                setStatus.style.color = 'var(--accent)';
-                            }
-                        }
-                    } else {
-                        // Invalid set 3 — check if numbers > 7 to suggest tiebreak format
-                        v3.textContent = '';
-                        if (s3[0] > 7 || s3[1] > 7) {
-                            set3Hint.textContent = 'For 10-point tiebreaker, enter 1-0 or 0-1';
-                        } else {
-                            set3Hint.textContent = '';
-                        }
-                        set3TbRow.style.display = 'none';
+                const sh = set3Row.querySelector('.set3-hint');
+                if (s3 && isValidGame3(s3[0], s3[1])) {
+                    v3.textContent = '✓'; v3.style.color = '#2ecc71';
+                    if (sh) sh.textContent = '';
+                    if (!IS_PICKLEBALL && set3TbRow) {
+                        if (isMatchTiebreakSet(s3[0],s3[1])) { set3TbRow.style.display='flex'; set3TbRow.style.alignItems='center'; const th=set3TbRow.querySelector('.tb-hint'); if(th) th.textContent='First to 10, win by 2'; }
+                        else if (isSetTiebreak(s3[0],s3[1])) { set3TbRow.style.display='flex'; set3TbRow.style.alignItems='center'; const th=set3TbRow.querySelector('.tb-hint'); if(th) th.textContent='First to 7, win by 2'; }
+                        else { set3TbRow.style.display='none'; }
                     }
-                } else {
-                    v3.textContent = '';
-                    if (set3Hint) set3Hint.textContent = '';
-                    set3TbRow.style.display = 'none';
-                }
+                    if (winnerId) {
+                        const fMy=myW+(youWonSet(s3)?1:0), fOpp=oppW+(youWonSet(s3)?0:1);
+                        const wGot=winnerIsMe?fMy:fOpp;
+                        setStatus.textContent = wGot<2 ? 'Scores do not match winner' : `${winnerName} wins`;
+                        setStatus.style.color = wGot<2 ? '#e74c3c' : 'var(--accent)';
+                    }
+                } else { v3.textContent = ''; if(sh) sh.textContent=''; if(set3TbRow) set3TbRow.style.display='none'; }
             } else {
-                // Straight sets — hide match tiebreak
                 set3Row.style.display = 'none';
-                set3TbRow.style.display = 'none';
-                set3Row.querySelectorAll('input').forEach(inp => inp.value = '');
-                set3TbRow.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
-                document.querySelector('[name="set3_tb"]') && (document.querySelector('[name="set3_tb"]').value = '');
-                set3Row.querySelector('.set-validation').textContent = '';
-                const set3HintSS = set3Row.querySelector('.set3-hint');
-                if (set3HintSS) set3HintSS.textContent = '';
-
+                if (set3TbRow) set3TbRow.style.display='none';
+                set3Row.querySelectorAll('input').forEach(i=>i.value='');
+                if(set3TbRow) set3TbRow.querySelectorAll('input[type="text"]').forEach(i=>i.value='');
+                const h3=document.querySelector('[name="set3_tb"]'); if(h3) h3.value='';
+                set3Row.querySelector('.set-validation').textContent='';
+                const sh=set3Row.querySelector('.set3-hint'); if(sh) sh.textContent='';
                 if (winnerId) {
-                    const winnerSetsWon = winnerIsMe ? mySetWins : oppSetWins;
-                    if (winnerSetsWon < 2) {
-                        setStatus.textContent = 'Scores do not match winner';
-                        setStatus.style.color = '#e74c3c';
-                    } else {
-                        setStatus.textContent = `${winnerName} wins ${Math.max(mySetWins, oppSetWins)}-${Math.min(mySetWins, oppSetWins)}`;
-                        setStatus.style.color = 'var(--accent)';
-                    }
+                    const wGot=winnerIsMe?myW:oppW;
+                    setStatus.textContent = wGot<2 ? 'Scores do not match winner' : `${winnerName} wins`;
+                    setStatus.style.color = wGot<2 ? '#e74c3c' : 'var(--accent)';
                     setStatus.style.display = '';
                 }
             }
         }
     } else {
-        set3Row.style.display = 'none';
-        set3TbRow.style.display = 'none';
-        set3Row.querySelectorAll('input').forEach(inp => inp.value = '');
-        set3TbRow.querySelectorAll('input[type="text"]').forEach(inp => inp.value = '');
-        document.querySelector('[name="set3_tb"]') && (document.querySelector('[name="set3_tb"]').value = '');
-        set3Row.querySelector('.set-validation').textContent = '';
-        setStatus.style.display = 'none';
+        set3Row.style.display='none';
+        if(set3TbRow) set3TbRow.style.display='none';
+        set3Row.querySelectorAll('input').forEach(i=>i.value='');
+        if(set3TbRow) set3TbRow.querySelectorAll('input[type="text"]').forEach(i=>i.value='');
+        const h3=document.querySelector('[name="set3_tb"]'); if(h3) h3.value='';
+        set3Row.querySelector('.set-validation').textContent='';
+        setStatus.style.display='none';
     }
     validateForm();
 }
@@ -429,369 +316,133 @@ function validateForm() {
     const outcome = outcomeSelect.value;
     const oppId = opponentSelect.value;
     const winnerId = getWinnerId();
-
-    // Must have opponent
     if (!oppId) { setSubmitEnabled(false); return; }
-
-    // No-winner outcomes just need opponent
-    if (outcome === 'schedule_problem' || outcome === 'weather_problem') {
-        setSubmitEnabled(true); return;
-    }
-
-    // All other outcomes need a winner
+    if (outcome==='schedule_problem'||outcome==='weather_problem') { setSubmitEnabled(true); return; }
     if (!winnerId) { setSubmitEnabled(false); return; }
-
-    // Forfeit / injury not played — winner + opponent is enough
-    if (outcome === 'forfeit' || outcome === 'injury_not_played') {
-        setSubmitEnabled(true); return;
-    }
-
-    // Injury not finished — allow partial scores
-    if (outcome === 'injury_not_finished') {
-        setSubmitEnabled(true); return;
-    }
-
-    // Completed — need valid scores and winner must match
-    const s1 = getSetScores(1);
-    const s2 = getSetScores(2);
-    if (!s1 || !s2) { setSubmitEnabled(false); return; }
-    if (!isValidSet(s1[0], s1[1])) { setSubmitEnabled(false); return; }
-    if (!isValidSet2(s2[0], s2[1])) { setSubmitEnabled(false); return; }
-
-    const winnerIsMe = winnerId === myId;
-    const set2IsTB = isMatchTiebreakSet(s2[0], s2[1]);
-
-    if (set2IsTB) {
-        // Check TB detail if 7-6
-        if (isSetTiebreak(s1[0], s1[1])) {
-            const tb1 = document.querySelector('[name="set1_tb"]').value;
-            if (!tb1) { setSubmitEnabled(false); return; }
+    if (outcome==='forfeit'||outcome==='injury_not_played') { setSubmitEnabled(true); return; }
+    if (outcome==='injury_not_finished') { setSubmitEnabled(true); return; }
+    const s1=getSetScores(1), s2=getSetScores(2);
+    if (!s1||!s2) { setSubmitEnabled(false); return; }
+    if (!isValidGame(s1[0],s1[1])||!isValidGame2(s2[0],s2[1])) { setSubmitEnabled(false); return; }
+    const winnerIsMe=winnerId===myId;
+    if (!IS_PICKLEBALL) {
+        const s2TB=isMatchTiebreakSet(s2[0],s2[1]);
+        if (s2TB) {
+            if (isSetTiebreak(s1[0],s1[1])) { const tb1=document.querySelector('[name="set1_tb"]'); if(tb1&&!tb1.value){setSubmitEnabled(false);return;} }
+            const tb2=document.querySelector('[name="set2_tb"]'); if(tb2&&!tb2.value){setSubmitEnabled(false);return;}
+            if (!(winnerIsMe?youWonSet(s1):!youWonSet(s1))||!(winnerIsMe?(s2[0]===1):(s2[1]===1))){setSubmitEnabled(false);return;}
+            setSubmitEnabled(true); return;
         }
-        // Check set2 TB detail
-        const tb2 = document.querySelector('[name="set2_tb"]').value;
-        if (!tb2) { setSubmitEnabled(false); return; }
-        // Winner must match
-        const winnerWonS1 = winnerIsMe ? youWonSet(s1) : !youWonSet(s1);
-        const winnerWonTB = winnerIsMe ? (s2[0] === 1) : (s2[1] === 1);
-        if (!winnerWonS1 || !winnerWonTB) { setSubmitEnabled(false); return; }
-        setSubmitEnabled(true); return;
+        if (isSetTiebreak(s1[0],s1[1])) { const tb1=document.querySelector('[name="set1_tb"]'); if(tb1&&!tb1.value){setSubmitEnabled(false);return;} }
+        if (isSetTiebreak(s2[0],s2[1])) { const tb2=document.querySelector('[name="set2_tb"]'); if(tb2&&!tb2.value){setSubmitEnabled(false);return;} }
     }
-
-    // Check set1 TB detail if 7-6
-    if (isSetTiebreak(s1[0], s1[1])) {
-        const tb1 = document.querySelector('[name="set1_tb"]').value;
-        if (!tb1) { setSubmitEnabled(false); return; }
-    }
-    // Check set2 TB detail if 7-6
-    if (isSetTiebreak(s2[0], s2[1])) {
-        const tb2 = document.querySelector('[name="set2_tb"]').value;
-        if (!tb2) { setSubmitEnabled(false); return; }
-    }
-
-    const mySetWins = (youWonSet(s1) ? 1 : 0) + (youWonSet(s2) ? 1 : 0);
-    const oppSetWins = 2 - mySetWins;
-
-    if (mySetWins === 1 && oppSetWins === 1) {
-        // Need set 3
-        const s3 = getSetScores(3);
-        if (!s3 || !isValidSet3(s3[0], s3[1])) { setSubmitEnabled(false); return; }
-
-        if (isMatchTiebreakSet(s3[0], s3[1])) {
-            // 10-point tiebreak — need TB detail
-            const tb3 = document.querySelector('[name="set3_tb"]').value;
-            if (!tb3) { setSubmitEnabled(false); return; }
-            const parts = tb3.split('-');
-            if (parts.length === 2) {
-                const a = parseInt(parts[0]), b = parseInt(parts[1]);
-                if (!isValid10PointTiebreak(a, b)) { setSubmitEnabled(false); return; }
-            }
-        } else if (isSetTiebreak(s3[0], s3[1])) {
-            // 7-6 in set 3 — need TB detail
-            const tb3 = document.querySelector('[name="set3_tb"]').value;
-            if (!tb3) { setSubmitEnabled(false); return; }
-            const parts = tb3.split('-');
-            if (parts.length === 2) {
-                const a = parseInt(parts[0]), b = parseInt(parts[1]);
-                if (!isValidTiebreak(a, b)) { setSubmitEnabled(false); return; }
-            }
+    const myW=(youWonSet(s1)?1:0)+(youWonSet(s2)?1:0), oppW=2-myW;
+    if (myW===1&&oppW===1) {
+        const s3=getSetScores(3);
+        if (!s3||!isValidGame3(s3[0],s3[1])){setSubmitEnabled(false);return;}
+        if (!IS_PICKLEBALL) {
+            if (isMatchTiebreakSet(s3[0],s3[1])) { const tb3=document.querySelector('[name="set3_tb"]'); if(!tb3||!tb3.value){setSubmitEnabled(false);return;} const p=tb3.value.split('-'); if(p.length===2&&!isValid10PointTiebreak(parseInt(p[0]),parseInt(p[1]))){setSubmitEnabled(false);return;} }
+            else if (isSetTiebreak(s3[0],s3[1])) { const tb3=document.querySelector('[name="set3_tb"]'); if(!tb3||!tb3.value){setSubmitEnabled(false);return;} }
         }
-
-        const finalMyWins = mySetWins + (youWonSet(s3) ? 1 : 0);
-        const finalOppWins = oppSetWins + (youWonSet(s3) ? 0 : 1);
-        const winnerSetsWon = winnerIsMe ? finalMyWins : finalOppWins;
-        if (winnerSetsWon < 2) { setSubmitEnabled(false); return; }
+        const fMy=myW+(youWonSet(s3)?1:0), fOpp=oppW+(youWonSet(s3)?0:1);
+        if ((winnerIsMe?fMy:fOpp)<2){setSubmitEnabled(false);return;}
         setSubmitEnabled(true); return;
     }
-
-    // Straight sets — check winner matches
-    const winnerSetsWon = winnerIsMe ? mySetWins : oppSetWins;
-    if (winnerSetsWon < 2) { setSubmitEnabled(false); return; }
+    if ((winnerIsMe?myW:oppW)<2){setSubmitEnabled(false);return;}
     setSubmitEnabled(true);
 }
 
-function setSubmitEnabled(enabled) {
-    submitBtn.disabled = !enabled;
-    submitBtn.style.opacity = enabled ? '1' : '0.5';
-    submitBtn.style.cursor = enabled ? 'pointer' : 'not-allowed';
+function setSubmitEnabled(e) {
+    submitBtn.disabled=!e; submitBtn.style.opacity=e?'1':'0.5'; submitBtn.style.cursor=e?'pointer':'not-allowed';
 }
 
 function updateFormState() {
-    const outcome = outcomeSelect.value;
-
-    winnerGroup.style.display = '';
-    winnerSelect.required = true;
-    scoresSection.style.display = '';
-    set3Row.style.display = 'none';
-    set1TbRow.style.display = 'none';
-    set2TbRow.style.display = 'none';
-    set3TbRow.style.display = 'none';
-    setStatus.style.display = 'none';
-
-    if (outcome === 'completed') {
-        updateScores();
-    } else if (outcome === 'forfeit' || outcome === 'injury_not_played') {
-        scoresSection.style.display = 'none';
-        scoresSection.querySelectorAll('input').forEach(inp => inp.value = '');
-    } else if (outcome === 'injury_not_finished') {
-        set3Row.style.display = '';
-    } else if (outcome === 'schedule_problem' || outcome === 'weather_problem') {
-        winnerGroup.style.display = 'none';
-        winnerSelect.required = false;
-        winnerSelect.value = '';
-        scoresSection.style.display = 'none';
-        scoresSection.querySelectorAll('input').forEach(inp => inp.value = '');
-    }
+    const outcome=outcomeSelect.value;
+    winnerGroup.style.display=''; winnerSelect.required=true; scoresSection.style.display='';
+    set3Row.style.display='none';
+    if(set1TbRow) set1TbRow.style.display='none';
+    if(set2TbRow) set2TbRow.style.display='none';
+    if(set3TbRow) set3TbRow.style.display='none';
+    setStatus.style.display='none';
+    if (outcome==='completed') { updateScores(); }
+    else if (outcome==='forfeit'||outcome==='injury_not_played') { scoresSection.style.display='none'; scoresSection.querySelectorAll('input').forEach(i=>i.value=''); }
+    else if (outcome==='injury_not_finished') { set3Row.style.display=''; }
+    else if (outcome==='schedule_problem'||outcome==='weather_problem') { winnerGroup.style.display='none'; winnerSelect.required=false; winnerSelect.value=''; scoresSection.style.display='none'; scoresSection.querySelectorAll('input').forEach(i=>i.value=''); }
     validateForm();
 }
 
 opponentSelect.addEventListener('change', function() {
-    const oppId = this.value;
-    // Remove any existing opponent option from winner dropdown
-    const existing = winnerSelect.querySelector('.opp-option');
-    if (existing) existing.remove();
-    // Reset winner selection
-    winnerSelect.value = '';
-    // Add selected opponent as winner option
-    if (oppId && opponents[oppId]) {
-        const opt = document.createElement('option');
-        opt.value = oppId;
-        opt.textContent = opponents[oppId];
-        opt.className = 'opp-option';
+    const oppId=this.value;
+    const ex=winnerSelect.querySelector('.opp-option'); if(ex) ex.remove();
+    winnerSelect.value='';
+    if (oppId&&opponents[oppId]) {
+        const opt=document.createElement('option');
+        opt.value=oppId;
+        opt.textContent=IS_PICKLEBALL?`${opponents[oppId]}'s team`:opponents[oppId];
+        opt.className='opp-option';
         winnerSelect.appendChild(opt);
     }
     updateScores();
 });
-
 outcomeSelect.addEventListener('change', updateFormState);
 winnerSelect.addEventListener('change', updateScores);
-
-// Listen on all score inputs (sets) — allow up to 2 digits
 document.querySelectorAll('.set-score-row input').forEach(inp => {
-    inp.addEventListener('input', function() {
-        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 2);
-        updateScores();
-    });
+    inp.addEventListener('input', function() { this.value=this.value.replace(/[^0-9]/g,'').slice(0,2); updateScores(); });
 });
-
-// Listen on tiebreak detail inputs
 document.querySelectorAll('.set-tb-row input[type="text"]').forEach(inp => {
     inp.addEventListener('input', function() {
-        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 2);
-        const setNum = this.closest('#set1-tb-row') ? 1 : (this.closest('#set2-tb-row') ? 2 : 3);
-        syncTbHidden(setNum);
-        updateScores();
+        this.value=this.value.replace(/[^0-9]/g,'').slice(0,2);
+        const n=this.closest('#set1-tb-row')?1:(this.closest('#set2-tb-row')?2:3);
+        syncTbHidden(n); updateScores();
     });
 });
-
-// If opponent is pre-selected (single opponent), trigger change to populate winner dropdown
-if (opponentSelect.value) {
-    opponentSelect.dispatchEvent(new Event('change'));
-}
+if (opponentSelect.value) opponentSelect.dispatchEvent(new Event('change'));
 updateFormState();
 
 {% if edit_match %}
-// Pre-fill existing match data
 (function() {
-    outcomeSelect.value = '{{ edit_match.outcome_type }}';
+    outcomeSelect.value='{{ edit_match.outcome_type }}';
     outcomeSelect.dispatchEvent(new Event('change'));
-    {% if edit_match.winner_id %}
-    winnerSelect.value = '{{ edit_match.winner_id }}';
-    {% endif %}
-    {% if edit_match.set1_my is not none %}
-    document.querySelector('[name="set1_p1"]').value = '{{ edit_match.set1_my }}';
-    document.querySelector('[name="set1_p2"]').value = '{{ edit_match.set1_opp }}';
-    {% endif %}
-    {% if edit_match.set2_my is not none %}
-    document.querySelector('[name="set2_p1"]').value = '{{ edit_match.set2_my }}';
-    document.querySelector('[name="set2_p2"]').value = '{{ edit_match.set2_opp }}';
-    {% endif %}
-    {% if edit_match.set3_my is not none %}
-    document.querySelector('[name="set3_p1"]').value = '{{ edit_match.set3_my }}';
-    document.querySelector('[name="set3_p2"]').value = '{{ edit_match.set3_opp }}';
-    {% endif %}
-    {% if edit_match.set1_tb %}
-    const tb1parts = '{{ edit_match.set1_tb }}'.split('-');
-    document.querySelector('[name="set1_tb_you"]').value = tb1parts[0] || '';
-    document.querySelector('[name="set1_tb_opp"]').value = tb1parts[1] || '';
-    syncTbHidden(1);
-    {% endif %}
-    {% if edit_match.set2_tb %}
-    const tb2parts = '{{ edit_match.set2_tb }}'.split('-');
-    document.querySelector('[name="set2_tb_you"]').value = tb2parts[0] || '';
-    document.querySelector('[name="set2_tb_opp"]').value = tb2parts[1] || '';
-    syncTbHidden(2);
-    {% endif %}
-    {% if edit_match.set3_tb %}
-    const tb3parts = '{{ edit_match.set3_tb }}'.split('-');
-    document.querySelector('[name="set3_tb_you"]').value = tb3parts[0] || '';
-    document.querySelector('[name="set3_tb_opp"]').value = tb3parts[1] || '';
-    syncTbHidden(3);
-    {% endif %}
+    {% if edit_match.winner_id %}winnerSelect.value='{{ edit_match.winner_id }}';{% endif %}
+    {% if edit_match.set1_my is not none %}document.querySelector('[name="set1_p1"]').value='{{ edit_match.set1_my }}'; document.querySelector('[name="set1_p2"]').value='{{ edit_match.set1_opp }}';{% endif %}
+    {% if edit_match.set2_my is not none %}document.querySelector('[name="set2_p1"]').value='{{ edit_match.set2_my }}'; document.querySelector('[name="set2_p2"]').value='{{ edit_match.set2_opp }}';{% endif %}
+    {% if edit_match.set3_my is not none %}document.querySelector('[name="set3_p1"]').value='{{ edit_match.set3_my }}'; document.querySelector('[name="set3_p2"]').value='{{ edit_match.set3_opp }}';{% endif %}
+    {% if edit_match.set1_tb and ladder_sport != 'pickleball' %}const tb1p='{{ edit_match.set1_tb }}'.split('-'); const tb1y=document.querySelector('[name="set1_tb_you"]'); const tb1o=document.querySelector('[name="set1_tb_opp"]'); if(tb1y) tb1y.value=tb1p[0]||''; if(tb1o) tb1o.value=tb1p[1]||''; syncTbHidden(1);{% endif %}
+    {% if edit_match.set2_tb and ladder_sport != 'pickleball' %}const tb2p='{{ edit_match.set2_tb }}'.split('-'); const tb2y=document.querySelector('[name="set2_tb_you"]'); const tb2o=document.querySelector('[name="set2_tb_opp"]'); if(tb2y) tb2y.value=tb2p[0]||''; if(tb2o) tb2o.value=tb2p[1]||''; syncTbHidden(2);{% endif %}
+    {% if edit_match.set3_tb and ladder_sport != 'pickleball' %}const tb3p='{{ edit_match.set3_tb }}'.split('-'); const tb3y=document.querySelector('[name="set3_tb_you"]'); const tb3o=document.querySelector('[name="set3_tb_opp"]'); if(tb3y) tb3y.value=tb3p[0]||''; if(tb3o) tb3o.value=tb3p[1]||''; syncTbHidden(3);{% endif %}
     updateScores();
 })();
 {% endif %}
 
 document.getElementById('result-form').addEventListener('submit', function(e) {
-    const outcome = outcomeSelect.value;
-
-    if (outcome === 'completed') {
-        const winnerId = getWinnerId();
-        const winnerIsMe = winnerId === myId;
-
-        if (!winnerId) {
-            alert('Please select a winner.');
-            e.preventDefault();
-            return;
-        }
-
-        const s1 = getSetScores(1);
-        const s2 = getSetScores(2);
-
-        if (!s1 || !s2) {
-            alert('Please enter scores for both sets.');
-            e.preventDefault();
-            return;
-        }
-
-        if (!isValidSet(s1[0], s1[1])) {
-            alert(`Set 1 score ${s1[0]}-${s1[1]} is not valid.\n\nWin to 6 (up to 6-4), 7-5, or 7-6.`);
-            e.preventDefault();
-            return;
-        }
-
-        if (!isValidSet2(s2[0], s2[1])) {
-            alert(`Set 2 score ${s2[0]}-${s2[1]} is not valid.\n\nWin to 6 (up to 6-4), 7-5, 7-6, or 1-0 for match tiebreak.`);
-            e.preventDefault();
-            return;
-        }
-
-        const s2IsTB = isMatchTiebreakSet(s2[0], s2[1]);
-
-        if (s2IsTB) {
-            // Match tiebreak in lieu of full 2nd set — validate TB score in set2_tb
-            const tbVal = document.querySelector('[name="set2_tb"]').value;
-            if (tbVal) {
-                const parts = tbVal.split('-');
-                if (parts.length === 2) {
-                    const tbA = parseInt(parts[0]), tbB = parseInt(parts[1]);
-                    if (!isValidTiebreak(tbA, tbB)) {
-                        alert(`Tiebreak score ${tbA}-${tbB} is not valid.\n\nFirst to 10 (or 7), win by 2.`);
-                        e.preventDefault();
-                        return;
-                    }
-                }
-            }
-            // Winner must have won set 1 + tiebreak (both)
-            const winnerWonS1 = winnerIsMe ? youWonSet(s1) : !youWonSet(s1);
-            const winnerWonTB = winnerIsMe ? (s2[0] === 1) : (s2[1] === 1);
-            if (!winnerWonS1 && !winnerWonTB) {
-                const winnerName = getWinnerName();
-                alert(`${winnerName} didn't win either the set or the tiebreak. Check your scores or change the winner.`);
-                e.preventDefault();
-                return;
-            }
+    const outcome=outcomeSelect.value;
+    if (outcome==='completed') {
+        const winnerId=getWinnerId(); const winnerIsMe=winnerId===myId;
+        if (!winnerId) { alert('Please select a winner.'); e.preventDefault(); return; }
+        const s1=getSetScores(1), s2=getSetScores(2);
+        if (!s1||!s2) { alert(IS_PICKLEBALL?'Please enter scores for both games.':'Please enter scores for both sets.'); e.preventDefault(); return; }
+        if (!isValidGame(s1[0],s1[1])) { alert(IS_PICKLEBALL?`Game 1 score ${s1[0]}-${s1[1]} is not valid. Games go to 11, win by 2.`:`Set 1 score ${s1[0]}-${s1[1]} is not valid.`); e.preventDefault(); return; }
+        if (!isValidGame2(s2[0],s2[1])) { alert(IS_PICKLEBALL?`Game 2 score ${s2[0]}-${s2[1]} is not valid. Games go to 11, win by 2.`:`Set 2 score ${s2[0]}-${s2[1]} is not valid.`); e.preventDefault(); return; }
+        const s2TB=!IS_PICKLEBALL&&isMatchTiebreakSet(s2[0],s2[1]);
+        if (s2TB) {
+            const wS1=winnerIsMe?youWonSet(s1):!youWonSet(s1), wTB=winnerIsMe?(s2[0]===1):(s2[1]===1);
+            if (!wS1&&!wTB) { alert(`${getWinnerName()} didn't win either the set or the tiebreak.`); e.preventDefault(); return; }
         } else {
-            const mySet1 = youWonSet(s1);
-            const mySet2 = youWonSet(s2);
-            let mySetWins = (mySet1 ? 1 : 0) + (mySet2 ? 1 : 0);
-            let oppSetWins = 2 - mySetWins;
-
-            if (mySetWins === 1 && oppSetWins === 1) {
-                const s3 = getSetScores(3);
-                if (!s3) {
-                    alert('Sets are split 1-1 — please enter a set 3 score or 1-0/0-1 for a 10-point tiebreak.');
-                    e.preventDefault();
-                    return;
-                }
-                if (!isValidSet3(s3[0], s3[1])) {
-                    alert(`Set 3 score ${s3[0]}-${s3[1]} is not valid.\n\nEnter a full set score (e.g. 6-3, 7-5, 7-6) or 1-0/0-1 for a 10-point tiebreak.`);
-                    e.preventDefault();
-                    return;
-                }
-                if (isMatchTiebreakSet(s3[0], s3[1])) {
-                    // Validate 10-point TB detail score
-                    const tb3Val = document.querySelector('[name="set3_tb"]').value;
-                    if (!tb3Val) {
-                        alert('Please enter the tiebreak score for set 3.');
-                        e.preventDefault();
-                        return;
-                    }
-                    const tb3Parts = tb3Val.split('-');
-                    if (tb3Parts.length === 2) {
-                        const tb3A = parseInt(tb3Parts[0]), tb3B = parseInt(tb3Parts[1]);
-                        if (!isValid10PointTiebreak(tb3A, tb3B)) {
-                            alert(`Tiebreak score ${tb3A}-${tb3B} is not valid.\n\nFirst to 10, win by 2.`);
-                            e.preventDefault();
-                            return;
-                        }
-                    }
-                } else if (isSetTiebreak(s3[0], s3[1])) {
-                    // Validate 7-point TB detail score for 7-6 in set 3
-                    const tb3Val = document.querySelector('[name="set3_tb"]').value;
-                    if (!tb3Val) {
-                        alert('Please enter the tiebreak score for set 3.');
-                        e.preventDefault();
-                        return;
-                    }
-                    const tb3Parts = tb3Val.split('-');
-                    if (tb3Parts.length === 2) {
-                        const tb3A = parseInt(tb3Parts[0]), tb3B = parseInt(tb3Parts[1]);
-                        if (!isValidTiebreak(tb3A, tb3B)) {
-                            alert(`Tiebreak score ${tb3A}-${tb3B} is not valid.\n\nFirst to 7, win by 2.`);
-                            e.preventDefault();
-                            return;
-                        }
-                    }
-                }
-                mySetWins += youWonSet(s3) ? 1 : 0;
-                oppSetWins += youWonSet(s3) ? 0 : 1;
+            let myW=(youWonSet(s1)?1:0)+(youWonSet(s2)?1:0), oppW=2-myW;
+            if (myW===1&&oppW===1) {
+                const s3=getSetScores(3);
+                if (!s3) { alert(IS_PICKLEBALL?'Games tied 1-1 — enter game 3 score.':'Sets tied 1-1 — enter set 3 score.'); e.preventDefault(); return; }
+                if (!isValidGame3(s3[0],s3[1])) { alert(IS_PICKLEBALL?`Game 3 score ${s3[0]}-${s3[1]} is not valid.`:`Set 3 score ${s3[0]}-${s3[1]} is not valid.`); e.preventDefault(); return; }
+                myW+=youWonSet(s3)?1:0; oppW+=youWonSet(s3)?0:1;
             }
-
-            // Check winner matches set results
-            const winnerSetsWon = winnerIsMe ? mySetWins : oppSetWins;
-            if (winnerSetsWon < 2) {
-                const winnerName = getWinnerName();
-                alert(`${winnerName} only won ${winnerSetsWon} set(s) — the winner must win 2 sets. Check your scores or change the winner.`);
-                e.preventDefault();
-                return;
-            }
+            if ((winnerIsMe?myW:oppW)<2) { alert(`${getWinnerName()} only won ${winnerIsMe?myW:oppW} game(s) — winner must win 2.`); e.preventDefault(); return; }
         }
-
-        // Sync tiebreak hidden fields before submit
-        syncTbHidden(1);
-        syncTbHidden(2);
-        syncTbHidden(3);
+        if (!IS_PICKLEBALL) { syncTbHidden(1); syncTbHidden(2); syncTbHidden(3); }
     }
-
-    if (outcome === 'injury_not_finished') {
-        for (let i = 1; i <= 3; i++) {
-            const p1 = document.querySelector(`[name="set${i}_p1"]`).value;
-            const p2 = document.querySelector(`[name="set${i}_p2"]`).value;
-            if ((p1 !== '' && p2 === '') || (p1 === '' && p2 !== '')) {
-                alert(`Set ${i}: Both scores must be filled or both empty.`);
-                e.preventDefault();
-                return;
-            }
+    if (outcome==='injury_not_finished') {
+        for(let i=1;i<=3;i++) {
+            const p1=document.querySelector(`[name="set${i}_p1"]`).value, p2=document.querySelector(`[name="set${i}_p2"]`).value;
+            if ((p1!==''&&p2==='')||(p1===''&&p2!=='')) { alert(`${IS_PICKLEBALL?'Game':'Set'} ${i}: Both scores must be filled or both empty.`); e.preventDefault(); return; }
         }
     }
 });

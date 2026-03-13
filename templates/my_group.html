@@ -11,8 +11,71 @@
 </div>
 {% else %}
 
+{% if ladder_sport == 'pickleball' %}
+<!-- Partner Section for Pickleball -->
+<h2 class="section-title">Your Partner This Month</h2>
+
+{% if my_partner %}
+<div class="card" style="margin-bottom: 16px; border-left: 3px solid var(--accent);">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <div style="font-weight: 700; font-size: 1.05rem;">{{ my_partner.partner_username }}</div>
+            {% if my_partner.partner_email %}<div style="color: var(--text-muted); font-size: 0.85rem;">{{ my_partner.partner_email }}</div>{% endif %}
+            {% if my_partner.partner_phone %}<div style="color: var(--text-muted); font-size: 0.85rem;">{{ my_partner.partner_phone }}</div>{% endif %}
+            <span class="badge badge-active" style="margin-top: 4px;">Confirmed Partner</span>
+        </div>
+        <form method="POST" action="{{ url_for('partner_cancel') }}" onsubmit="return confirm('Remove your confirmed partner?')">
+            <button type="submit" class="btn btn-secondary btn-sm">Remove Partner</button>
+        </form>
+    </div>
+</div>
+{% else %}
+{% if partner_requests_received %}
+<div class="card" style="margin-bottom: 16px;">
+    <h3 style="margin-bottom: 12px;">Incoming Partner Requests</h3>
+    {% for req in partner_requests_received %}
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border);">
+        <span><strong>{{ req.requester_username }}</strong> wants to be your partner this month</span>
+        <div style="display: flex; gap: 8px;">
+            <form method="POST" action="{{ url_for('partner_confirm', req_id=req.id) }}" class="inline-form">
+                <button type="submit" class="btn btn-primary btn-sm">Accept</button>
+            </form>
+            <form method="POST" action="{{ url_for('partner_decline', req_id=req.id) }}" class="inline-form">
+                <button type="submit" class="btn btn-secondary btn-sm">Decline</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% if my_partner_request_sent %}
+<div class="card" style="margin-bottom: 16px; background: rgba(241,196,15,0.06);">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <span>Partner request sent to <strong>{{ my_partner_request_sent.partner_username }}</strong> — waiting for them to accept</span>
+        <form method="POST" action="{{ url_for('partner_cancel') }}" class="inline-form">
+            <button type="submit" class="btn btn-secondary btn-sm">Cancel Request</button>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="card" style="margin-bottom: 16px;">
+    <p style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.9rem;">No partner yet. Request a partner for this month's doubles matches.</p>
+    <form method="POST" action="{{ url_for('partner_request') }}" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <select name="partner_id" required style="flex: 1; min-width: 180px;">
+            <option value="">Select a player...</option>
+            {% for p in all_ladder_players %}
+            <option value="{{ p.id }}">{{ p.username }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">Request Partner</button>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+{% endif %}
+
 <div class="card">
-    <h3 style="color: var(--accent); margin-bottom: 16px;">Group {{ group.group_number }} — Your Opponents</h3>
+    <h3 style="color: var(--accent); margin-bottom: 16px;">Group {{ group.group_number }} — {{ 'Opponent Teams' if ladder_sport == 'pickleball' else 'Your Opponents' }}</h3>
 
     {% for p in group_players %}
     <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border);">
